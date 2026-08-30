@@ -1,9 +1,9 @@
 #!/usr/bin/env python3
 """
-Second Brain 确定性健康检查脚本。
-用代码检测结构性问题，输出 JSON 供 /wiki lint 使用。
+Second Brain deterministic health check script.
+Detects structural issues with code and outputs JSON for /wiki lint.
 
-用法:
+Usage:
     python lint.py --wiki-dir /path/to/kb/wiki --raw-dir /path/to/kb/raw
     python lint.py --wiki-dir /path/to/kb/wiki --raw-dir /path/to/kb/raw --json
 """
@@ -15,20 +15,28 @@ import json
 import yaml
 from pathlib import Path
 from collections import defaultdict
+from dataclasses import dataclass
 
 REQUIRED_FRONTMATTER = {"title", "type", "created", "updated", "tags"}
 VALID_TYPES = {"source", "entity", "concept", "analysis", "overview", "conventions"}
 SPECIAL_PAGES = {"index.md", "log.md"}
 
-# 由命令行参数设置
+# Set via command-line arguments
 WIKI_DIR: Path
 RAW_DIR: Path
 
 # ---------- helpers ----------
 
-def parse_frontmatter(filepath: Path) -> tuple[dict | None, str]:
-    """返回 (frontmatter_dict, body_text)。解析失败返回 (None, full_text)。"""
-    text = filepath.read_text(encoding="utf-8")
+@dataclass
+class PageContent:
+    path: Path
+    text: str
+    frontmatter: dict | None
+    body: str
+
+
+def parse_frontmatter_text(text: str) -> tuple[dict | None, str]:
+    """Return (frontmatter_dict, body_text). Returns (None, full_text) on parse failure."""
     m = re.match(r"^---\n(.*?\n)---\n(.*)", text, re.DOTALL)
     if not m:
         return None, text
@@ -39,13 +47,29 @@ def parse_frontmatter(filepath: Path) -> tuple[dict | None, str]:
         return None, text
 
 
+def load_page_contents(pages: list[Path]) -> dict[Path, PageContent]:
+    """Read and parse each page once for reuse across checks."""
+    contents = {}
+    for page in pages:
+        text = page.read_text(encoding="utf-8")
+        fm, body = parse_frontmatter_text(text)
+        contents[page] = PageContent(path=page, text=text, frontmatter=fm, body=body)
+    return contents
+
+
+def parse_frontmatter(filepath: Path) -> tuple[dict | None, str]:
+    """Return (frontmatter_dict, body_text). Returns (None, full_text) on parse failure."""
+    text = filepath.read_text(encoding="utf-8")
+    return parse_frontmatter_text(text)
+
+
 def extract_wikilinks(text: str) -> list[str]:
-    """提取所有 [[target]] 或 [[target|alias]] 中的 target。"""
+    """Extract target from all [[target]] or [[target|alias]] wikilinks."""
     return re.findall(r"\[\[([^\]|]+)(?:\|[^\]]+)?\]\]", text)
 
 
 def resolve_wikilink(target: str) -> Path | None:
-    """将 wikilink target 解析为 wiki/ 下的文件路径。"""
+    """Resolve wikilink target to a file path under wiki/."""
     for subdir in ["sources", "entities", "concepts", "analyses", ""]:
         candidate = WIKI_DIR / subdir / f"{target}.md" if subdir else WIKI_DIR / f"{target}.md"
         if candidate.exists():
@@ -54,7 +78,7 @@ def resolve_wikilink(target: str) -> Path | None:
 
 
 def get_wiki_pages() -> list[Path]:
-    """获取所有 wiki 页面（排除 index.md 和 log.md）。"""
+    """Get all wiki pages (excluding index.md and log.md)."""
     pages = []
     for f in WIKI_DIR.rglob("*.md"):
         if f.name not in SPECIAL_PAGES:
@@ -63,21 +87,19 @@ def get_wiki_pages() -> list[Path]:
 
 
 def page_id(filepath: Path) -> str:
-    """从文件路径提取 wikilink 可用的 ID（如 concepts/memex.md → memex）。"""
+    """Extract wikilink-usable ID from file path (e.g. concepts/memex.md → memex)."""
     return filepath.stem
 
 
 # ---------- checks ----------
 
-def check_broken_links(pages: list[Path]) -> list[dict]:
-    """P0: 检查断链 — [[link]] 指向不存在的 wiki 页面。"""
+def check_broken_links(pages: list[Path], contents: dict[Path, PageContent]) -> list[dict]:
+    """P0: Check broken links — [[link]] points to non-existent wiki page."""
     issues = []
     all_ids = {p.stem for p in pages}
 
     for page in pages:
-        _, body = parse_frontmatter(page)
-        full_text = page.read_text(encoding="utf-8")
-        links = extract_wikilinks(full_text)
+        links = extract_wikilinks(contents[page].text)
         for target in links:
             if target.startswith("raw/"):
                 continue
@@ -86,39 +108,38 @@ def check_broken_links(pages: list[Path]) -> list[dict]:
                     "level": "P0",
                     "type": "broken_link",
                     "file": str(page.relative_to(WIKI_DIR)),
-                    "detail": f"[[{target}]] 指向不存在的页面",
+                    "detail": f"[[{target}]] points to non-existent page",
                 })
     return issues
 
 
-def check_raw_wikilinks(pages: list[Path]) -> list[dict]:
-    """P0: 检查 [[raw/...]] wikilinks — 应使用普通 Markdown 链接。"""
+def check_raw_wikilinks(pages: list[Path], contents: dict[Path, PageContent]) -> list[dict]:
+    """P0: Check [[raw/...]] wikilinks — should use standard Markdown links."""
     issues = []
     for page in pages:
-        text = page.read_text(encoding="utf-8")
-        matches = re.findall(r"\[\[(raw/[^\]|]+)(?:\|[^\]]+)?\]\]", text)
+        matches = re.findall(r"\[\[(raw/[^\]|]+)(?:\|[^\]]+)?\]\]", contents[page].text)
         for m in matches:
             issues.append({
                 "level": "P0",
                 "type": "raw_wikilink",
                 "file": str(page.relative_to(WIKI_DIR)),
-                "detail": f"[[{m}]] 应改为普通 Markdown 链接，避免图谱虚影节点",
+                "detail": f"[[{m}]] should be a standard Markdown link to avoid phantom graph nodes",
             })
     return issues
 
 
-def check_frontmatter(pages: list[Path]) -> list[dict]:
-    """P0: 检查 frontmatter 完整性。"""
+def check_frontmatter(pages: list[Path], contents: dict[Path, PageContent]) -> list[dict]:
+    """P0: Check frontmatter completeness."""
     issues = []
     for page in pages:
-        fm, _ = parse_frontmatter(page)
+        fm = contents[page].frontmatter
         rel = str(page.relative_to(WIKI_DIR))
         if fm is None:
             issues.append({
                 "level": "P0",
                 "type": "no_frontmatter",
                 "file": rel,
-                "detail": "缺少 YAML frontmatter",
+                "detail": "Missing YAML frontmatter",
             })
             continue
         missing = REQUIRED_FRONTMATTER - set(fm.keys())
@@ -127,20 +148,20 @@ def check_frontmatter(pages: list[Path]) -> list[dict]:
                 "level": "P0",
                 "type": "incomplete_frontmatter",
                 "file": rel,
-                "detail": f"缺少字段: {', '.join(sorted(missing))}",
+                "detail": f"Missing fields: {', '.join(sorted(missing))}",
             })
         if fm.get("type") and fm["type"] not in VALID_TYPES:
             issues.append({
                 "level": "P1",
                 "type": "invalid_type",
                 "file": rel,
-                "detail": f"type '{fm['type']}' 不在合法值 {VALID_TYPES} 中",
+                "detail": f"type '{fm['type']}' is not in valid values {VALID_TYPES}",
             })
     return issues
 
 
 def check_index_consistency(pages: list[Path]) -> list[dict]:
-    """P0: 检查 index.md 与实际文件的一致性。"""
+    """P0: Check index.md consistency with actual files."""
     issues = []
     index_path = WIKI_DIR / "index.md"
     if not index_path.exists():
@@ -148,7 +169,7 @@ def check_index_consistency(pages: list[Path]) -> list[dict]:
             "level": "P0",
             "type": "missing_index",
             "file": "index.md",
-            "detail": "index.md 不存在",
+            "detail": "index.md does not exist",
         })
         return issues
 
@@ -170,7 +191,7 @@ def check_index_consistency(pages: list[Path]) -> list[dict]:
                 "level": "P0",
                 "type": "index_dangling",
                 "file": "index.md",
-                "detail": f"索引引用 {ref} 但文件不存在",
+                "detail": f"Index references {ref} but file does not exist",
             })
 
     for rel in content_pages:
@@ -179,22 +200,23 @@ def check_index_consistency(pages: list[Path]) -> list[dict]:
                 "level": "P0",
                 "type": "index_missing",
                 "file": "index.md",
-                "detail": f"文件 {rel} 存在但未在索引中列出",
+                "detail": f"File {rel} exists but is not listed in index",
             })
 
     return issues
 
 
-def check_bidirectional_links(pages: list[Path]) -> list[dict]:
-    """P1: 检查双向链接 — 如果 A 的 Related 链接到 B，B 的 Related 也应链接到 A。"""
+def check_bidirectional_links(pages: list[Path], contents: dict[Path, PageContent]) -> list[dict]:
+    """P1: Check bidirectional links — if A's Related links to B, B's Related should link back to A."""
     issues = []
     related_links = {}
     page_map = {p.stem: p for p in pages}
 
     for page in pages:
-        text = page.read_text(encoding="utf-8")
         pid = page.stem
-        related_match = re.search(r"## Related\n(.*?)(?:\n## |\Z)", text, re.DOTALL)
+        related_match = re.search(
+            r"## Related\n(.*?)(?:\n## |\Z)", contents[page].text, re.DOTALL
+        )
         if not related_match:
             continue
         related_section = related_match.group(1)
@@ -215,21 +237,20 @@ def check_bidirectional_links(pages: list[Path]) -> list[dict]:
                         "level": "P1",
                         "type": "missing_reverse_link",
                         "file": str(page_map[target].relative_to(WIKI_DIR)),
-                        "detail": f"Related 区块缺少到 [[{pid}]] 的反向链接（{pid} 已链接到此页）",
+                        "detail": f"Related section missing backlink to [[{pid}]] ({pid} already links to this page)",
                     })
 
     return issues
 
 
-def check_orphan_pages(pages: list[Path]) -> list[dict]:
-    """P1: 检查孤岛页面 — 无任何入站链接（除 index.md 和 overview.md 外）。"""
+def check_orphan_pages(pages: list[Path], contents: dict[Path, PageContent]) -> list[dict]:
+    """P1: Check orphan pages — no inbound links (except from index.md and overview.md)."""
     issues = []
     incoming = defaultdict(set)
 
     for page in pages:
-        text = page.read_text(encoding="utf-8")
         pid = page.stem
-        links = extract_wikilinks(text)
+        links = extract_wikilinks(contents[page].text)
         for target in links:
             incoming[target].add(pid)
 
@@ -250,17 +271,17 @@ def check_orphan_pages(pages: list[Path]) -> list[dict]:
                 "level": "P1",
                 "type": "orphan_page",
                 "file": rel,
-                "detail": f"孤岛页面，没有其他 wiki 页面链接到此",
+                "detail": "Orphan page — no other wiki pages link here",
             })
 
     return issues
 
 
-def check_sources_field(pages: list[Path]) -> list[dict]:
-    """P1: 检查 entity/concept 页面是否有 sources 字段。"""
+def check_sources_field(pages: list[Path], contents: dict[Path, PageContent]) -> list[dict]:
+    """P1: Check entity/concept pages have sources field."""
     issues = []
     for page in pages:
-        fm, _ = parse_frontmatter(page)
+        fm = contents[page].frontmatter
         if fm is None:
             continue
         ptype = fm.get("type", "")
@@ -269,7 +290,7 @@ def check_sources_field(pages: list[Path]) -> list[dict]:
                 "level": "P1",
                 "type": "missing_sources",
                 "file": str(page.relative_to(WIKI_DIR)),
-                "detail": f"type={ptype} 但缺少 sources 字段（应标注引用的原始素材）",
+                "detail": f"type={ptype} but missing sources field (should cite referenced raw materials)",
             })
     return issues
 
@@ -278,24 +299,25 @@ def check_sources_field(pages: list[Path]) -> list[dict]:
 
 def run_all_checks() -> list[dict]:
     pages = get_wiki_pages()
+    contents = load_page_contents(pages)
     issues = []
-    issues += check_broken_links(pages)
-    issues += check_raw_wikilinks(pages)
-    issues += check_frontmatter(pages)
+    issues += check_broken_links(pages, contents)
+    issues += check_raw_wikilinks(pages, contents)
+    issues += check_frontmatter(pages, contents)
     issues += check_index_consistency(pages)
-    issues += check_bidirectional_links(pages)
-    issues += check_orphan_pages(pages)
-    issues += check_sources_field(pages)
+    issues += check_bidirectional_links(pages, contents)
+    issues += check_orphan_pages(pages, contents)
+    issues += check_sources_field(pages, contents)
     level_order = {"P0": 0, "P1": 1, "P2": 2}
     issues.sort(key=lambda x: (level_order.get(x["level"], 9), x["file"]))
     return issues
 
 
 def main():
-    parser = argparse.ArgumentParser(description="Second Brain 健康检查")
-    parser.add_argument("--wiki-dir", required=True, help="wiki 目录的绝对路径")
-    parser.add_argument("--raw-dir", required=True, help="raw 目录的绝对路径")
-    parser.add_argument("--json", action="store_true", dest="output_json", help="输出 JSON 格式")
+    parser = argparse.ArgumentParser(description="Second Brain health check")
+    parser.add_argument("--wiki-dir", required=True, help="Absolute path to wiki directory")
+    parser.add_argument("--raw-dir", required=True, help="Absolute path to raw directory")
+    parser.add_argument("--json", action="store_true", dest="output_json", help="Output JSON format")
     args = parser.parse_args()
 
     global WIKI_DIR, RAW_DIR
@@ -303,7 +325,7 @@ def main():
     RAW_DIR = Path(args.raw_dir).resolve()
 
     if not WIKI_DIR.exists():
-        print(f"错误: wiki 目录不存在: {WIKI_DIR}", file=sys.stderr)
+        print(f"Error: wiki directory does not exist: {WIKI_DIR}", file=sys.stderr)
         sys.exit(2)
 
     issues = run_all_checks()
@@ -317,32 +339,32 @@ def main():
     p1 = [i for i in issues if i["level"] == "P1"]
     p2 = [i for i in issues if i["level"] == "P2"]
 
-    print(f"Wiki 健康检查 — {WIKI_DIR}")
-    print(f"共 {len(pages)} 个页面\n")
+    print(f"Wiki health check — {WIKI_DIR}")
+    print(f"{len(pages)} pages total\n")
 
     if not issues:
-        print("✅ 未发现问题！")
+        print("✅ No issues found!")
         return
 
     if p0:
-        print(f"🔴 P0 — 需要修复 ({len(p0)})")
+        print(f"🔴 P0 — Needs fixing ({len(p0)})")
         for i in p0:
             print(f"  [{i['type']}] {i['file']}: {i['detail']}")
         print()
 
     if p1:
-        print(f"🟡 P1 — 建议改进 ({len(p1)})")
+        print(f"🟡 P1 — Suggested improvements ({len(p1)})")
         for i in p1:
             print(f"  [{i['type']}] {i['file']}: {i['detail']}")
         print()
 
     if p2:
-        print(f"🟢 P2 — 可选优化 ({len(p2)})")
+        print(f"🟢 P2 — Optional optimizations ({len(p2)})")
         for i in p2:
             print(f"  [{i['type']}] {i['file']}: {i['detail']}")
         print()
 
-    print(f"总计: {len(p0)} P0 / {len(p1)} P1 / {len(p2)} P2")
+    print(f"Total: {len(p0)} P0 / {len(p1)} P1 / {len(p2)} P2")
 
     if p0:
         sys.exit(1)

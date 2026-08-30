@@ -1,243 +1,243 @@
-# Ingest 工作流
+# Ingest Workflow
 
-收录新素材到知识库。默认全自动执行，仅在需要人工判断时才询问用户。
+Ingest new materials into the knowledge base. Runs fully automatically by default; only asks the user when human judgment is needed.
 
-> 📌 **路径约定**: 本文档中的 `raw/`、`wiki/` 均指当前知识库的绝对路径，由 SKILL.md 路由时确定（`KB_RAW`、`KB_WIKI`）。`KB_LANG` 为当前知识库的语言设置。
+> 📌 **Path convention**: `raw/` and `wiki/` in this document refer to the current knowledge base absolute paths, determined during SKILL.md routing (`KB_RAW`, `KB_WIKI`). `KB_LANG` is the current knowledge base language setting.
 
-## 核心原则
+## Core Principles
 
-1. **默认自动化** — 常规收录不打断用户，直接执行完整流程
-2. **需要时才问** — 只在遇到矛盾、歧义、边界判断时才用 AskUserQuestion
-3. **结构化存放** — 页面严格按类型放入对应目录，交叉引用形成完整图谱
+1. **Automation by default** — routine ingestion does not interrupt the user; run the full flow directly
+2. **Ask only when needed** — use AskUserQuestion only for contradictions, ambiguities, or boundary judgments
+3. **Structured storage** — pages go strictly into the correct directories by type; cross-references form a complete graph
 
-## 工作流程
+## Workflow
 
-### 1. 发现新素材
+### 1. Discover new materials
 
-读取 `wiki/index.md` 获取已收录素材列表，扫描 `raw/` 目录（排除 `assets/` 子目录），找出未被收录的文件。
+Read `wiki/index.md` to get the list of already-ingested materials, scan the `raw/` directory (excluding the `assets/` subdirectory), and find files not yet ingested.
 
-如果用户指定了文件名，仅处理该文件。
+If the user specified a filename, process only that file.
 
-### 2. 阅读素材
+### 2. Read materials
 
-逐一阅读新素材：
-- Markdown 文件：直接读取
-- PDF 文件：使用 Read 工具读取
-- 图片文件：使用 Read 工具查看
+Read each new material in turn:
+- Markdown files: read directly
+- PDF files: read with the Read tool
+- Image files: view with the Read tool
 
-#### 图片处理流程
+#### Image handling
 
-LLM 无法在一次读取中同时处理 Markdown 文本和内嵌图片。对含图片的素材，分两步处理：
+The LLM cannot process Markdown text and embedded images in a single read. For materials with images, handle in two steps:
 
-1. **先读文本**：读取 Markdown/PDF，理解主体内容
-2. **再看图片**：扫描文本中引用的图片路径（`![](path)` 或 `![[path]]`），逐张使用 Read 工具查看图片，提取补充信息（图表数据、架构图、流程图等）
+1. **Read text first**: read Markdown/PDF and understand the main content
+2. **Then view images**: scan for image paths in the text (`![](path)` or `![[path]]`), view each image with the Read tool, and extract supplementary information (chart data, architecture diagrams, flowcharts, etc.)
 
-图片中的关键信息（数据点、结构、流程）应整合进 wiki 页面的文本描述中，不要仅靠图片传达信息。如果图片本身很重要（如架构图、实验结果图），在 wiki 页面中用普通 Markdown 图片语法引用：`![描述](../../raw/assets/图片名)`。
+Integrate key information from images (data points, structure, flow) into the wiki page text; do not rely on images alone. If an image is important (e.g. architecture diagram, experiment results), reference it in the wiki page with standard Markdown image syntax: `![description](../../raw/assets/image-name)`.
 
-### 3. 分析与决策
+### 3. Analyze and decide
 
-阅读素材后，分析以下内容：
-- 核心要点（3-5 个）
-- 应创建/更新的实体页和概念页
-- 与已有知识的关联
-- 是否存在矛盾
+After reading, analyze:
+- Core points (3-5)
+- Entity and concept pages to create/update
+- Connections to existing knowledge
+- Whether contradictions exist
 
-**根据分析结果决定是否需要询问用户：**
+**Decide whether to ask the user based on analysis:**
 
-#### 自动执行（不询问）的条件 — 满足以下全部：
-- 无矛盾：新素材与已有 wiki 内容无冲突
-- 分类清晰：每个实体/概念的类型（entity vs concept）和归属目录无歧义
-- 无合并歧义：新识别的实体/概念与已有页面不存在"可能是同一个但不确定"的情况
-- 规模合理：计划创建的新页面 ≤ 5 个
+#### Auto-execute (no prompt) — all of the following must hold:
+- No contradiction: new material does not conflict with existing wiki content
+- Clear classification: each entity/concept type (entity vs concept) and directory placement is unambiguous
+- No merge ambiguity: newly identified entities/concepts are not "possibly the same but uncertain" vs existing pages
+- Reasonable scale: planned new pages ≤ 5
 
-自动执行时，在开始创建页面前用一段简短文字告知用户计划（不阻塞）：
+When auto-executing, briefly inform the user of the plan before creating pages (non-blocking):
 ```
-收录《素材标题》— 计划创建 N 个新页面、更新 M 个已有页面，自动执行中...
+Ingesting "<Material Title>" — planning to create N new pages, update M existing pages; running automatically...
 ```
 
-#### 需要询问的场景 — 满足以下任一：
+#### Scenarios requiring user input — any of the following:
 
-**场景 A：矛盾** — 新素材与已有内容冲突
+**Scenario A: Contradiction** — new material conflicts with existing content
 ```json
 {
   "questions": [{
-    "question": "《素材标题》与已有内容存在矛盾:\n\n· 已有: <已有页面的说法>\n· 新素材: <新素材的说法>\n\n如何处理？",
-    "header": "内容矛盾",
+    "question": "\"<Material Title>\" contradicts existing content:\n\n· Existing: <existing page claim>\n· New material: <new material claim>\n\nHow to handle?",
+    "header": "Content contradiction",
     "multiSelect": false,
     "options": [
-      {"label": "标注矛盾并保留双方", "description": "用 ⚠️ 矛盾标记，保留两种说法（推荐）"},
-      {"label": "以新素材为准", "description": "更新已有内容为新素材的说法"},
-      {"label": "保留旧内容", "description": "忽略新素材中矛盾的部分"}
+      {"label": "Mark contradiction and keep both", "description": "Use ⚠️ contradiction marker; keep both claims (recommended)"},
+      {"label": "Prefer new material", "description": "Update existing content to match new material"},
+      {"label": "Keep old content", "description": "Ignore the contradictory part of new material"}
     ]
   }]
 }
 ```
 
-**场景 B：合并歧义** — 不确定新概念/实体是否应与已有页面合并
+**Scenario B: Merge ambiguity** — unsure whether new concept/entity should merge with an existing page
 ```json
 {
   "questions": [{
-    "question": "新素材提到的「XX」与已有页面 [[yy]] 可能是同一概念。\n\n· XX: <新素材的描述>\n· yy: <已有页面的描述>\n\n是否合并？",
-    "header": "页面合并",
+    "question": "New material mentions \"XX\" which may be the same as existing page [[yy]].\n\n· XX: <new material description>\n· yy: <existing page description>\n\nMerge?",
+    "header": "Page merge",
     "multiSelect": false,
     "options": [
-      {"label": "合并到已有页面", "description": "将新信息整合进 [[yy]]"},
-      {"label": "创建独立页面", "description": "XX 和 yy 是不同概念，分别维护"},
-      {"label": "合并并重命名", "description": "合并内容，使用更准确的名称"}
+      {"label": "Merge into existing page", "description": "Integrate new info into [[yy]]"},
+      {"label": "Create separate page", "description": "XX and yy are different concepts; maintain separately"},
+      {"label": "Merge and rename", "description": "Merge content using a more accurate name"}
     ]
   }]
 }
 ```
 
-**场景 C：大规模收录** — 计划创建的新页面 > 5 个
+**Scenario C: Large-scale ingest** — planning > 5 new pages
 ```json
 {
   "questions": [{
-    "question": "《素材标题》内容丰富，计划创建较多页面:\n\n新建: <列表>\n更新: <列表>\n\n选择收录范围：",
-    "header": "收录范围",
+    "question": "\"<Material Title>\" is rich; many pages planned:\n\nNew: <list>\nUpdate: <list>\n\nChoose ingestion scope:",
+    "header": "Ingestion scope",
     "multiSelect": false,
     "options": [
-      {"label": "全部收录（推荐）", "description": "创建上述所有页面"},
-      {"label": "仅核心页面", "description": "只创建最重要的 3-5 个页面"},
-      {"label": "仅创建摘要页", "description": "只建 source 页，暂不拆分实体和概念"}
+      {"label": "Ingest all (recommended)", "description": "Create all pages listed above"},
+      {"label": "Core pages only", "description": "Create only the 3-5 most important pages"},
+      {"label": "Summary page only", "description": "Create source page only; defer entity/concept split"}
     ]
   }]
 }
 ```
 
-**多个场景可组合**：如果同时存在矛盾和合并歧义，在一次 AskUserQuestion 中提出多个问题（最多 4 个）。
+**Multiple scenarios can combine**: if contradiction and merge ambiguity both exist, ask multiple questions in one AskUserQuestion (max 4).
 
-### 4. 创建素材摘要页
+### 4. Create source summary page
 
-在 `wiki/sources/` 下创建摘要页，文件名与原始文件对应。
+Create a summary page under `wiki/sources/` with a filename matching the raw file.
 
-模板：
+Template:
 ```markdown
 ---
-title: 素材标题
-aliases: [中文别名]
+title: Material Title
+aliases: [Alternative names]
 type: source
 created: YYYY-MM-DD
 updated: YYYY-MM-DD
-tags: [相关标签]
-raw_file: raw/原始文件名
+tags: [relevant tags]
+raw_file: raw/original-filename
 ---
 
-# 素材标题
+# Material Title
 
-## 来源信息
+## Source Information
 
-- **原始文件**: [raw/文件名](../../raw/文件名)
-- **类型**: 文章/论文/报告/...
-- **日期**: 素材发布日期（如有）
-- **作者**: 作者（如有）
+- **Raw file**: [raw/filename](../../raw/filename)
+- **Type**: article/paper/report/...
+- **Date**: material publication date (if available)
+- **Author**: author (if available)
 
-## 核心内容
+## Core Content
 
-[3-5 段关键内容摘要]
+[3-5 paragraphs of key content summary]
 
-## 关键要点
+## Key Points
 
-- 要点 1
-- 要点 2
+- Point 1
+- Point 2
 - ...
 
-## 引用与数据
+## Quotes and Data
 
-[重要的数据点、引用、统计]
+[Important data points, quotes, statistics]
 
 ## Related
 
-- [[相关页面]]
+- [[related-page]]
 ```
 
-**注意**：原始文件链接使用普通 Markdown 链接 `[text](path)`，不要用 `[[wikilink]]`，避免 Obsidian 图谱出现 raw 文件虚影节点。
+**Note**: link to raw files with standard Markdown `[text](path)`, not `[[wikilink]]`, to avoid phantom raw nodes in the Obsidian graph.
 
-### 5. 创建/更新实体和概念页
+### 5. Create/update entity and concept pages
 
-#### 目录结构规范
+#### Directory structure
 
-严格按类型存放，确保图谱和目录结构清晰：
+Store strictly by type for a clear graph and directory layout:
 
-| 类型 | 目录 | 判断标准 | 示例 |
+| Type | Directory | Criteria | Examples |
 |------|------|---------|------|
-| 实体 | `wiki/entities/` | 有具体名称的"东西"：人物、组织、工具、项目、产品、数据集 | vannevar-bush, forge-benchmark, openai |
-| 概念 | `wiki/concepts/` | 抽象的思想、方法、技术、模式、理论 | memex, knowledge-management, reinforcement-learning |
+| Entity | `wiki/entities/` | Named "things": people, orgs, tools, projects, products, datasets | vannevar-bush, forge-benchmark, openai |
+| Concept | `wiki/concepts/` | Abstract ideas, methods, techniques, patterns, theories | memex, knowledge-management, reinforcement-learning |
 
-**判断原则**：能用专有名词指代的是实体，需要解释"是什么"的是概念。边界模糊时偏向概念。
+**Rule of thumb**: if it can be referred to by a proper noun, it's an entity; if it needs "what is it?" explanation, it's a concept. When ambiguous, lean toward concept.
 
-#### 创建/更新规则
+#### Create/update rules
 
-**新建页面**：
-- 在素材中被重点讨论（非一笔带过）的实体/概念才值得新建页面
-- 仅被提及 1-2 次且非核心内容的不建页面，在相关页面中简要提及即可
+**New pages**:
+- Only create pages for entities/concepts discussed substantively (not in passing)
+- Entities/concepts mentioned 1-2 times and not central need no page; mention briefly on related pages
 
-**更新已有页面**：
-- 在对应段落追加新信息，不要覆盖已有内容
-- 更新 frontmatter 的 `sources` 列表和 `updated` 日期
-- 在 Related 区块添加新的关联链接
+**Update existing pages**:
+- Append new information in the relevant section; do not overwrite existing content
+- Update frontmatter `sources` list and `updated` date
+- Add new links in the Related section
 
-模板：
+Template:
 ```markdown
 ---
-title: 名称
-aliases: [中文别名]
-type: entity 或 concept
+title: Name
+aliases: [Alternative names]
+type: entity or concept
 created: YYYY-MM-DD
 updated: YYYY-MM-DD
-tags: [标签]
-sources: [引用的素材文件名]
+tags: [tags]
+sources: [referenced material filenames]
 ---
 
-# 名称
+# Name
 
-[概述段落]
+[Overview paragraph]
 
-## 详细信息
+## Details
 
-[按主题组织的详细内容]
+[Detailed content organized by topic]
 
 ## Related
 
-- [[相关页面]] — 关系说明
+- [[related-page]] — relationship description
 ```
 
-### 6. 维护图谱完整性
+### 6. Maintain graph integrity
 
-这是最关键的步骤，确保知识图谱的连通性：
+Critical step to keep the knowledge graph connected:
 
-**双向链接规则**：
-- 如果 A 的 Related 链接到 B，则 B 的 Related **必须**链接回 A
-- 每个 entity/concept 页面的 Related **必须**包含到对应 source 摘要页的反向链接
-- 新建页面后，扫描所有**已有页面**的内容，如果已有页面讨论了新页面的主题但没有链接，补充链接
+**Bidirectional link rules**:
+- If A's Related links to B, B's Related **must** link back to A
+- Each entity/concept page's Related **must** include a backlink to the corresponding source summary page
+- After creating a new page, scan **existing pages**; if they discuss the new topic without a link, add the link
 
-**交叉引用规则**：
-- 页面正文中首次提及其他 wiki 页面的主题时，使用 `[[wikilink]]` 链接
-- Related 区块列出所有相关页面，附简短关系说明（如 `— 提出者`、`— 来源素材`）
+**Cross-reference rules**:
+- On first mention of another wiki topic in body text, use `[[wikilink]]`
+- Related section lists all related pages with brief relationship notes (e.g. `— proposer`, `— source material`)
 
-### 7. 更新索引和日志
+### 7. Update index and log
 
-- 在 `wiki/index.md` 对应分类下添加新条目
-- 更新 `wiki/overview.md` 的统计数据和近期活动
-- 在 `wiki/log.md` 顶部（`# Wiki Log` 标题之后）追加操作记录
+- Add new entries under the correct category in `wiki/index.md`
+- Update statistics and recent activity in `wiki/overview.md`
+- Append operation record at the top of `wiki/log.md` (after `# Wiki Log` heading)
 
-### 8. 运行确定性检查
+### 8. Run deterministic check
 
-所有页面创建/更新完成后，运行 `python <skill-dir>/scripts/lint.py --wiki-dir <KB_WIKI> --raw-dir <KB_RAW>`。如果脚本报出 P0 问题，立即修复后再结束 ingest 流程。
+After all pages are created/updated, run `python <skill-dir>/scripts/lint.py --wiki-dir <KB_WIKI> --raw-dir <KB_RAW>`. If the script reports P0 issues, fix them before ending the ingest flow.
 
-完成后输出收录摘要：
+Output ingestion summary when done:
 ```
-✅ 收录完成《素材标题》
-   新建: entities/xx.md, concepts/yy.md
-   更新: concepts/zz.md
-   lint: 通过
+✅ Ingest complete: "<Material Title>"
+   Created: entities/xx.md, concepts/yy.md
+   Updated: concepts/zz.md
+   lint: passed
 ```
 
-## 注意事项
+## Notes
 
-- **语言**: 使用 `KB_LANG` 设置（zh 或 en），所有新创建的 wiki 页面按该语言撰写。专有名词保留原文。无论素材本身是什么语言，wiki 页面统一用目标语言。
-- **aliases**: 每个页面的 frontmatter 都要填写 `aliases` 字段。language=zh 时填中文别名，language=en 时填英文别名。这是 Obsidian Front Matter Title 插件显示标题的依据。
-- 原始素材（`raw/` 下的文件）只读不改
-- 如果素材包含图片引用，记录图片路径以便后续单独查看
-- 保持摘要客观中立，区分事实与观点
-- 当新素材与已有内容矛盾时，使用 `> ⚠️ 矛盾` 标记
+- **Language**: all wiki pages are written in English. Keep proper nouns in original form regardless of source material language.
+- **aliases**: every page frontmatter must include `aliases` for the Obsidian Front Matter Title plugin.
+- Raw materials (files under `raw/`) are read-only — do not modify
+- If material includes image references, record paths for later viewing
+- Keep summaries objective; distinguish facts from opinions
+- When new material contradicts existing content, use `> ⚠️ Contradiction` marker

@@ -1,91 +1,91 @@
-# Lint 工作流
+# Lint Workflow
 
-对知识库进行健康检查，发现问题并提供修复建议。
+Health check the knowledge base, find issues, and provide fix suggestions.
 
-> 📌 **路径约定**: 本文档中的 `raw/`、`wiki/` 均指当前知识库的绝对路径，由 SKILL.md 路由时确定（`KB_RAW`、`KB_WIKI`）。`KB_LANG` 为当前知识库的语言设置。
+> 📌 **Path convention**: `raw/` and `wiki/` in this document refer to the current knowledge base absolute paths, determined during SKILL.md routing (`KB_RAW`, `KB_WIKI`). `KB_LANG` is the current knowledge base language setting.
 
-## 工作流程
+## Workflow
 
-### 1. 运行确定性检查脚本
+### 1. Run deterministic check script
 
-**首先**运行 `python <skill-dir>/scripts/lint.py --wiki-dir <KB_WIKI> --raw-dir <KB_RAW> --json`，获取脚本检测到的结构性问题。脚本覆盖以下确定性检查：
+**First** run `python <skill-dir>/scripts/lint.py --wiki-dir <KB_WIKI> --raw-dir <KB_RAW> --json` to get structural issues. The script covers:
 
-- 断链（`[[link]]` 指向不存在的页面）
-- `[[raw/...]]` wikilink 误用（应用普通 Markdown 链接）
-- Frontmatter 完整性（必填字段、type 合法性）
-- index.md 与实际文件一致性
-- 双向链接完整性（A→B 则 B→A）
-- 孤岛页面
-- entity/concept 页面缺少 sources 字段
+- Broken links (`[[link]]` points to non-existent page)
+- `[[raw/...]]` wikilink misuse (should use standard Markdown links)
+- Frontmatter completeness (required fields, valid type)
+- index.md consistency with actual files
+- Bidirectional link integrity (A→B implies B→A)
+- Orphan pages
+- entity/concept pages missing sources field
 
-将脚本输出作为 P0/P1 问题的基础，**不要重复检查脚本已覆盖的项目**。
+Use script output as the basis for P0/P1 issues; **do not duplicate checks the script already covers**.
 
-### 2. LLM 补充检查
+### 2. LLM supplemental checks
 
-在脚本结果基础上，用 LLM 能力补充**脚本无法检测的**语义问题：
+On top of script results, use LLM for **semantic issues scripts cannot detect**:
 
-#### P1 - 质量（LLM 补充）
-- **语言一致性**: 使用 `KB_LANG` 设置，检查每个页面的主体内容是否使用了目标语言。列出不一致的页面，提供批量翻译选项（用户确认后逐页翻译，保留 frontmatter 和 [[链接]] 不变）
-- **矛盾检测**: 扫描所有 `> ⚠️ 矛盾` 标记，汇总当前已知矛盾；同时检查不同页面间是否有未标记的互相矛盾的陈述
-- **缺失页面**: 被 3 次以上 `[[引用]]` 但没有独立页面的概念/实体
-- **陈旧信息**: updated 日期超过 30 天且有更新素材引用同一主题的页面
-- **空白区块**: 页面中有 `_待补充_` 或空的章节
+#### P1 — Quality (LLM supplement)
+- **Language consistency**: using `KB_LANG`, check whether each page body uses the target language. List inconsistent pages and offer batch translation (translate page by page after user confirmation; preserve frontmatter and `[[links]]`)
+- **Contradiction detection**: scan all `> ⚠️ Contradiction` markers and summarize known contradictions; also check for unmarked contradictory statements across pages
+- **Missing pages**: concepts/entities referenced 3+ times via `[[link]]` but without standalone pages
+- **Stale info**: pages with `updated` older than 30 days while newer ingested materials cover the same topic
+- **Empty sections**: pages with `_to be filled_` or empty headings
 
-#### P2 - 建议（LLM 补充）
-- **缺失交叉引用**: 内容相关但没有互相链接的页面
-- **标签不一致**: 同一概念使用了不同的标签名
-- **可合并页面**: 内容高度重叠的页面
-- **新页面建议**: 基于现有内容，建议创建的新概念/实体页
-- **数据空白与知识扩展**（使用 WebSearch 工具）:
-  1. 识别知识库中明显的信息缺口（如被多个页面引用但缺乏深度的主题）
-  2. 使用 **WebSearch** 工具搜索相关领域的最新进展、关键论文、权威资源
-  3. 输出建议列表，每条包含：缺口描述、搜索到的推荐来源（标题+链接）、建议的收录优先级
-  4. 格式示例：
+#### P2 — Suggestions (LLM supplement)
+- **Missing cross-references**: related content without mutual links
+- **Tag inconsistency**: same concept under different tag names
+- **Mergeable pages**: pages with highly overlapping content
+- **New page suggestions**: suggested new entity/concept pages based on existing content
+- **Knowledge gaps & expansion** (use WebSearch tool):
+  1. Identify obvious gaps (e.g. themes referenced by many pages but shallow)
+  2. Use **WebSearch** for latest developments, key papers, authoritative resources
+  3. Output suggestions: gap description, recommended sources (title + link), ingestion priority
+  4. Example format:
      ```
-     🔍 知识扩展建议（基于 web search）:
-     - [[memex]] 页面提到了 Ted Nelson 的超文本但无详细内容
-       → 推荐: "Ted Nelson and the Xanadu Project" (https://...)
-       → 优先级: 中
-     - [[manufacturing-ai]] 缺少 2026 年最新进展
-       → 推荐: "State of AI in Manufacturing 2026" (https://...)
-       → 优先级: 高
+     🔍 Knowledge expansion suggestions (based on web search):
+     - [[memex]] page mentions Ted Nelson's hypertext but lacks detail
+       → Recommended: "Ted Nelson and the Xanadu Project" (https://...)
+       → Priority: Medium
+     - [[manufacturing-ai]] lacks 2026 latest developments
+       → Recommended: "State of AI in Manufacturing 2026" (https://...)
+       → Priority: High
      ```
 
-### 3. 生成报告
+### 3. Generate report
 
-输出结构化的检查报告：
+Output a structured check report:
 
 ```markdown
-## Wiki 健康检查报告 (YYYY-MM-DD)
+## Wiki Health Check Report (YYYY-MM-DD)
 
-### 📊 统计
-- 总页面数: N
-- 素材摘要: N
-- 实体页面: N
-- 概念页面: N
-- 分析页面: N
+### 📊 Statistics
+- Total pages: N
+- Source summaries: N
+- Entity pages: N
+- Concept pages: N
+- Analysis pages: N
 
-### 🔴 P0 - 需要修复
-- [ ] 问题描述 → 修复方案
+### 🔴 P0 — Needs fixing
+- [ ] Issue description → fix approach
 
-### 🟡 P1 - 建议改进
-- [ ] 问题描述 → 改进方案
+### 🟡 P1 — Suggested improvements
+- [ ] Issue description → improvement approach
 
-### 🟢 P2 - 可选优化
-- [ ] 建议描述
+### 🟢 P2 — Optional optimizations
+- [ ] Suggestion description
 ```
 
-### 4. 执行修复
+### 4. Execute fixes
 
-向用户展示报告后：
-- P0 问题建议立即修复，请求用户确认
-- P1 问题逐项确认
-- P2 问题仅作建议
+After showing the report:
+- P0: suggest immediate fix; request user confirmation
+- P1: confirm item by item
+- P2: suggestions only
 
-用户确认后执行修复，并更新 `wiki/log.md`。
+After user confirms, run fixes and update `wiki/log.md`.
 
-## 注意事项
+## Notes
 
-- Lint 操作不会删除任何页面，只会建议合并或更新
-- 如果问题数量很多，分批展示，避免信息过载
-- 每次 lint 后在 log.md 记录检查结果摘要
+- Lint does not delete pages; only suggests merge or update
+- If many issues, show in batches to avoid overload
+- After each lint, record check summary in log.md

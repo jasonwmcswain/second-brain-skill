@@ -1,731 +1,733 @@
-# Second Brain Skill 使用手册
+# Second Brain Skill User Guide
 
-> 把你的第二大脑接入 Claude Code。基于 [Karpathy LLM Wiki](https://gist.github.com/karpathy/442a6bf555914893e9891c11519de94f) 的理念，将个人知识封装成 Skill，让 AI 成为真正理解你上下文的助手。
 
-**项目地址**: [github.com/ChavesLiu/second-brain-skill](https://github.com/ChavesLiu/second-brain-skill)
+> Plug your second brain into Claude Code. Inspired by [Karpathy's LLM Wiki](https://gist.github.com/karpathy/442a6bf555914893e9891c11519de94f), this project packages personal knowledge as a Skill, turning AI into an assistant that truly understands your context.
+
+**Repository**: [github.com/jasonwmcswain/second-brain-skill](https://github.com/jasonwmcswain/second-brain-skill)
 
 ---
 
-## 目录
+## Table of Contents
 
-- [核心理念](#核心理念)
-- [环境准备](#环境准备)
-- [安装 Skill](#安装-skill)
-- [初始化知识库](#初始化知识库)
-- [核心功能](#核心功能)
-  - [收录素材 — /wiki ingest](#收录素材--wiki-ingest)
-  - [查询知识 — /wiki query](#查询知识--wiki-query)
-  - [健康检查 — /wiki lint](#健康检查--wiki-lint)
-  - [删除与重置 — /wiki wipe](#删除与重置--wiki-wipe)
-  - [自动化测试 — /wiki test](#自动化测试--wiki-test)
-- [自然语言交互](#自然语言交互)
-- [Obsidian 集成](#obsidian-集成)
-- [接入 OpenClaw](#接入-openclaw)
-- [多知识库管理](#多知识库管理)
-- [适用场景](#适用场景)
+- [Core Philosophy](#core-philosophy)
+- [Prerequisites](#prerequisites)
+- [Installing the Skill](#installing-the-skill)
+- [Initializing a Knowledge Base](#initializing-a-knowledge-base)
+- [Core Features](#core-features)
+  - [Ingesting Materials — /wiki ingest](#ingesting-materials--wiki-ingest)
+  - [Querying Knowledge — /wiki query](#querying-knowledge--wiki-query)
+  - [Health Check — /wiki lint](#health-check--wiki-lint)
+  - [Delete & Reset — /wiki wipe](#delete--reset--wiki-wipe)
+  - [Automated Testing — /wiki test](#automated-testing--wiki-test)
+- [Natural Language Interaction](#natural-language-interaction)
+- [Obsidian Integration](#obsidian-integration)
+- [OpenClaw Integration](#openclaw-integration)
+- [Multi-KB Management](#multi-kb-management)
+- [Use Cases](#use-cases)
 - [FAQ](#faq)
 
 ---
 
-## 核心理念
+## Core Philosophy
 
-传统 RAG 是**解释器**——每次提问都从原始文档中重新检索、拼接、推理。Second Brain Skill 是**编译器**——LLM 预先将素材编译为结构化的 wiki，后续查询基于编译产物进行，知识随时间**持续复利增长**。
+Traditional RAG is an **interpreter** — every query re-retrieves, assembles, and reasons over raw documents from scratch. Second Brain Skill is a **compiler** — the LLM pre-compiles materials into a structured wiki, and subsequent queries operate on the compiled artifacts. Knowledge **compounds over time**.
 
-### 三层架构
+### Three-Layer Architecture
 
 ```
 ┌────────────────────────────────────────────────┐
-│  原始素材 (raw/)         ← 你写，LLM 只读       │
-│  论文、文章、笔记、PDF、图片                      │
+│  Raw Materials (raw/)    ← You write, LLM reads │
+│  Papers, articles, notes, PDFs, images          │
 ├────────────────────────────────────────────────┤
-│  知识库 (wiki/)          ← LLM 写，你浏览        │
-│  摘要、实体、概念、分析、交叉引用                  │
+│  Knowledge Base (wiki/)  ← LLM writes, you browse │
+│  Summaries, entities, concepts, analyses,       │
+│  cross-references                               │
 ├────────────────────────────────────────────────┤
-│  规范 (Skill)            ← 你和 LLM 共同演进     │
-│  SCHEMA、workflows、scripts                     │
+│  Spec (Skill)            ← You and LLM co-evolve │
+│  SCHEMA, workflows, scripts                     │
 └────────────────────────────────────────────────┘
 ```
 
-你负责挑选素材、提出好问题、思考洞见；LLM 负责所有繁重的整理工作——摘要、交叉引用、归档、一致性维护。
+You curate materials, ask good questions, and think about insights; the LLM handles all the heavy lifting — summarization, cross-referencing, archiving, and consistency maintenance.
 
 ---
 
-## 环境准备
+## Prerequisites
 
-### 必需
+### Required
 
-| 工具 | 说明 | 安装方式 |
-|------|------|---------|
-| **Claude Code** | Anthropic 官方 CLI 工具 | `npm install -g @anthropic-ai/claude-code` |
-| **Python 3.10+** | 运行辅助脚本（router.py、lint.py） | 系统自带或 brew install python |
-| **PyYAML** | lint.py 的依赖 | `pip install PyYAML` |
+| Tool | Description | Installation |
+|------|-------------|-------------|
+| **Claude Code** | Anthropic's official CLI tool | `npm install -g @anthropic-ai/claude-code` |
+| **Python 3.10+** | Runs helper scripts (router.py, lint.py) | System default or `brew install python` |
+| **PyYAML** | Dependency for lint.py | `pip install PyYAML` |
 
-### 推荐
+### Recommended
 
-| 工具 | 说明 |
-|------|------|
-| **Obsidian** | 用于浏览 wiki 的图谱视图、反向链接和页面内容 |
-| **Obsidian Web Clipper** | 浏览器扩展，一键将网页文章转为 Markdown 存入 raw/ |
-| **Git** | 版本管理，知识库的演化历史天然记录在 git 中 |
+| Tool | Description |
+|------|-------------|
+| **Obsidian** | Browse wiki graph views, backlinks, and page content |
+| **Obsidian Web Clipper** | Browser extension for one-click web article clipping to raw/ |
+| **Git** | Version control — knowledge base evolution is naturally tracked in git |
 
 ---
 
-## 安装 Skill
+## Installing the Skill
 
-### 方式一：从 GitHub 克隆安装（推荐）
+### Option 1: Clone from GitHub (Recommended)
 
 ```bash
-# 1. 克隆仓库
-git clone https://github.com/ChavesLiu/second-brain-skill.git
+# 1. Clone the repo
+git clone https://github.com/jasonwmcswain/second-brain-skill.git
 
-# 2. 将 skill 目录复制到 Claude Code 全局 skills 目录
+# 2. Copy the skill directory to Claude Code's global skills directory
 cp -r second-brain-skill/skills/wiki ~/.claude/skills/wiki
 
-# 3. 安装 Python 依赖
+# 3. Install Python dependencies
 pip install -r ~/.claude/skills/wiki/scripts/requirements.txt
 ```
 
-### 方式二：手动安装
+### Option 2: Manual Install
 
-下载仓库中的 `skills/wiki/` 目录，放置到 `~/.claude/skills/wiki/` 下即可。
+Download the `skills/wiki/` directory from the repo and place it at `~/.claude/skills/wiki/`.
 
-### 验证安装
+### Verify Installation
 
-安装完成后，在 Claude Code 中输入：
+After installation, run in Claude Code:
 
 ```
 /wiki help
 ```
 
-如果看到命令列表，说明安装成功。
+If you see a command list, the installation was successful.
 
-### 演示：从安装到首次使用
+### Demo: From Installation to First Use
 
-以下演示涵盖 `/wiki help` → `/wiki init` → `/wiki ingest` → `/wiki query` 的完整流程：
+The following demo covers the full `/wiki help` → `/wiki init` → `/wiki ingest` → `/wiki query` workflow:
 
-![演示：help → init → ingest → query 完整流程](images/guide.gif)
+![Demo: help → init → ingest → query full workflow](images/guide.gif)
 
-### 安装后的目录结构
+### Post-Installation Directory Structure
 
 ```
-~/.claude/skills/wiki/          # Skill 安装目录
-├── SKILL.md                    #   主入口，路由逻辑
-├── SCHEMA.md                   #   页面规范（frontmatter、交叉引用）
-├── README.md                   #   Skill 说明
-├── IDEA.md                     #   原始设计理念
-├── registries.json             #   知识库注册表
-├── workflows/                  #   各子命令的工作流定义
+~/.claude/skills/wiki/          # Skill installation directory
+├── SKILL.md                    #   Main entry point, routing logic
+├── SCHEMA.md                   #   Page specification (frontmatter, cross-references)
+├── README.md                   #   Skill documentation
+├── IDEA.md                     #   Original design philosophy
+├── registries.json             #   Knowledge base registry
+├── workflows/                  #   Sub-command workflow definitions
 │   ├── init.md
 │   ├── ingest.md
 │   ├── query.md
 │   ├── lint.md
 │   ├── wipe.md
 │   └── test.md
-└── scripts/                    #   辅助脚本
-    ├── router.py               #     确定性路由
-    ├── lint.py                 #     确定性健康检查
-    └── requirements.txt        #     Python 依赖
+└── scripts/                    #   Helper scripts
+    ├── router.py               #     Deterministic routing
+    ├── lint.py                 #     Deterministic health checks
+    └── requirements.txt        #     Python dependencies
 ```
 
 ---
 
-## 初始化知识库
+## Initializing a Knowledge Base
 
-运行以下命令创建你的第一个知识库：
+Run the following command to create your first knowledge base:
 
 ```
 /wiki init
 ```
 
-Claude Code 会依次询问三个问题：
+Claude Code will ask two questions:
 
-1. **知识库路径** — 将在此路径下创建 `raw/` 和 `wiki/` 子目录
-2. **知识库名称** — 用于多知识库切换时的显示名称
-3. **Wiki 语言** — `zh`（中文）或 `en`（English）
+1. **Knowledge base path** — `raw/` and `wiki/` subdirectories will be created here
+2. **Knowledge base name** — Display name used when switching between multiple KBs
 
+Wiki pages are written in English.
 
-初始化完成后，你会得到如下目录结构：
+After initialization, you'll have the following directory structure:
 
 ```
-~/my-kb/                        # 你指定的知识库路径
-├── raw/                        #   存放原始素材（你写入，LLM 只读）
-│   └── assets/                 #     图片和附件
-└── wiki/                       #   LLM 生成和维护的知识库
-    ├── index.md                #     内容索引（LLM 查询入口）
-    ├── log.md                  #     操作日志（时间线）
-    ├── overview.md             #     总览页（统计 + 知识图谱摘要）
-    ├── conventions.md          #     使用约定（你的操作偏好）
-    ├── sources/                #     素材摘要页
-    ├── entities/               #     实体页（人物、组织、工具）
-    ├── concepts/               #     概念页（理论、方法、模式）
-    └── analyses/               #     分析页（对比、综合论述）
+~/my-kb/                        # Your specified KB path
+├── raw/                        #   Raw materials (you write, LLM reads only)
+│   └── assets/                 #     Images and attachments
+└── wiki/                       #   LLM-generated and maintained knowledge base
+    ├── index.md                #     Content index (LLM query entry point)
+    ├── log.md                  #     Operation log (timeline)
+    ├── overview.md             #     Overview page (stats + knowledge graph summary)
+    ├── conventions.md          #     Usage conventions (your preferences)
+    ├── sources/                #     Material summary pages
+    ├── entities/               #     Entity pages (people, orgs, tools)
+    ├── concepts/               #     Concept pages (theories, methods, patterns)
+    └── analyses/               #     Analysis pages (comparisons, syntheses)
 ```
 
 ---
 
-## 核心功能
+## Core Features
 
-### 收录素材 — `/wiki ingest`
+### Ingesting Materials — `/wiki ingest`
 
-这是知识库成长的核心操作。将新素材整合进知识库，一次收录可能触发 10-15 个页面的创建或更新。
+This is the core operation for growing your knowledge base. It integrates new materials into the wiki — a single ingest may trigger the creation or update of 10–15 pages.
 
-#### 使用方式
-
-```
-/wiki ingest                        # 自动收录 raw/ 下所有新素材
-/wiki ingest paper-attention.pdf    # 指定收录某个文件
-```
-
-#### 工作流程
+#### Usage
 
 ```
-  放入素材            LLM 阅读            自动分析            创建/更新页面
+/wiki ingest                        # Auto-ingest all new materials in raw/
+/wiki ingest paper-attention.pdf    # Ingest a specific file
+```
+
+#### Workflow
+
+```
+  Add materials        LLM reads          Auto-analyze        Create/update pages
 ┌─────────┐      ┌───────────┐      ┌──────────────┐      ┌──────────────┐
-│ raw/    │  →  │ Markdown  │  →  │ 核心要点     │  →  │ sources/     │
-│ 文章.md │      │ PDF       │      │ 识别实体     │      │ entities/    │
-│ 论文.pdf│      │ 图片      │      │ 识别概念     │      │ concepts/    │
-└─────────┘      └───────────┘      │ 检查矛盾     │      │ index.md     │
-                                    └──────────────┘      │ overview.md  │
-                                                          │ log.md       │
+│ raw/    │  →  │ Markdown  │  →  │ Key points   │  →  │ sources/     │
+│ article │      │ PDF       │      │ ID entities  │      │ entities/    │
+│ paper   │      │ Images    │      │ ID concepts  │      │ concepts/    │
+└─────────┘      └───────────┘      │ Check contra-│      │ index.md     │
+                                    │ dictions     │      │ overview.md  │
+                                    └──────────────┘      │ log.md       │
                                                           └──────────────┘
 ```
 
-#### 操作步骤
+#### Steps
 
-1. 将素材文件放入知识库的 `raw/` 目录（支持 Markdown、PDF、图片）
-2. 执行 `/wiki ingest`
-3. LLM 自动完成以下工作：
-   - 阅读素材，提取核心要点
-   - 创建素材摘要页（`wiki/sources/`）
-   - 创建或更新实体页（`wiki/entities/`）和概念页（`wiki/concepts/`）
-   - 维护双向交叉引用，确保图谱完整性
-   - 更新 `index.md`、`overview.md`、`log.md`
-   - 运行 lint 脚本检查，P0 问题自动修复
+1. Place material files in the knowledge base's `raw/` directory (supports Markdown, PDF, images)
+2. Run `/wiki ingest`
+3. The LLM automatically:
+   - Reads materials and extracts key points
+   - Creates material summary pages (`wiki/sources/`)
+   - Creates or updates entity pages (`wiki/entities/`) and concept pages (`wiki/concepts/`)
+   - Maintains bidirectional cross-references to ensure graph integrity
+   - Updates `index.md`, `overview.md`, `log.md`
+   - Runs the lint script; P0 issues are auto-fixed
 
-#### 何时需要人工介入
+#### When Manual Intervention Is Needed
 
-大多数情况下 ingest 全自动完成。仅以下场景会询问你：
+Most ingests complete fully automatically. You'll only be asked in these scenarios:
 
-| 场景 | 说明 |
-|------|------|
-| **内容矛盾** | 新素材与已有 wiki 内容冲突 → 选择保留双方/以新为准/保留旧 |
-| **合并歧义** | 不确定新概念是否应与已有页面合并 → 选择合并/独立/重命名 |
-| **大规模收录** | 计划创建 >5 个新页面 → 选择全部收录/仅核心/仅摘要 |
-
----
-
-### 查询知识 — `/wiki query`
-
-基于 wiki 中已编译的知识回答问题。核心理念：**每次查询都让知识库变得更好**。
-
-#### 使用方式
-
-```
-/wiki query Memex 是什么？
-/wiki query 对比一下 RAG 和 Wiki 模式的优劣
-帮我整理一下目前知识库里关于强化学习的信息
-```
-
-#### 回答格式
-
-LLM 会根据问题类型自动选择最佳输出格式：
-
-| 问题类型 | 输出格式 | 示例 |
-|---------|---------|------|
-| 事实查询 | 简短回答 + 引用 | "Memex 是什么？" |
-| 比较分析 | Markdown 表格 | "对比 RAG 和 Wiki 模式" |
-| 综合论述 | 结构化长文 | "梳理知识管理的发展脉络" |
-| 时间线 | 按时间排列的列表 | "XX 领域的发展时间线" |
-| 概览 | 层级列表 | "整理 XX 的所有信息" |
-| 汇报分享 | Marp 幻灯片 | "生成一个关于 XX 的 PPT" |
-| 数据分析 | matplotlib 图表 | "对比各模型的性能数据" |
-| 关系梳理 | Obsidian Canvas | "画出 XX 之间的关系" |
-
-#### 知识回写机制
-
-查询完成后，LLM 会评估回答是否产生了新知识：
-
-- **自动回写**（不需确认）：补充已有页面的缺失信息、新增交叉引用、修正小错误
-- **建议回写**（需确认）：将有价值的分析保存为 `wiki/analyses/` 下的新页面、创建新实体/概念页
-
-```
-📝 本次查询产生了以下知识更新：
-
-自动更新:
-  - 更新了 [[memex]] 页面，补充了与现代 RAG 系统的对比
-  - 在 [[vannevar-bush]] 和 [[knowledge-management]] 之间添加了交叉引用
-
-建议操作:
-  - 💡 将本次对比分析保存为 wiki/analyses/memex-vs-rag.md？
-```
-
-#### 反馈与偏好
-
-你也可以通过 query 通道告诉 LLM 你的操作偏好：
-
-```
-回答时要标注来源
-比较类问题用表格
-一笔带过的概念不要建独立页
-```
-
-这些偏好会被记录到 `wiki/conventions.md`，后续所有操作自动遵守。
+| Scenario | Description |
+|----------|-------------|
+| **Content conflict** | New material contradicts existing wiki content → choose to keep both / prefer new / keep old |
+| **Merge ambiguity** | Unclear whether a new concept should merge with an existing page → choose merge / keep separate / rename |
+| **Large-scale ingest** | Planning to create >5 new pages → choose ingest all / core only / summaries only |
 
 ---
 
-### 健康检查 — `/wiki lint`
+### Querying Knowledge — `/wiki query`
 
-定期检查 wiki 的健康状况，发现和修复问题。建议每收录 5-10 篇素材后运行一次。
+Answers questions based on compiled knowledge in the wiki. Core principle: **every query makes the knowledge base better**.
 
-#### 使用方式
+#### Usage
+
+```
+/wiki query What is Memex?
+/wiki query Compare the pros and cons of RAG vs Wiki approaches
+Summarize everything in the knowledge base about reinforcement learning
+```
+
+#### Response Formats
+
+The LLM automatically selects the best output format based on question type:
+
+| Question Type | Output Format | Example |
+|--------------|---------------|---------|
+| Fact lookup | Short answer + citations | "What is Memex?" |
+| Comparison | Markdown table | "Compare RAG and Wiki approaches" |
+| Synthesis | Structured long-form | "Trace the evolution of knowledge management" |
+| Timeline | Chronological list | "Timeline of developments in XX" |
+| Overview | Hierarchical list | "Summarize all info about XX" |
+| Presentation | Marp slides | "Generate a PPT about XX" |
+| Data analysis | matplotlib charts | "Compare model performance data" |
+| Relationship mapping | Obsidian Canvas | "Map the relationships between XX" |
+
+#### Knowledge Write-Back
+
+After answering, the LLM evaluates whether the response produced new knowledge:
+
+- **Auto write-back** (no confirmation needed): Fill gaps in existing pages, add cross-references, fix minor errors
+- **Suggested write-back** (needs confirmation): Save valuable analyses as new pages under `wiki/analyses/`, create new entity/concept pages
+
+```
+📝 Knowledge updates from this query:
+
+Auto-updated:
+  - Updated [[memex]] page with comparison to modern RAG systems
+  - Added cross-reference between [[vannevar-bush]] and [[knowledge-management]]
+
+Suggested actions:
+  - 💡 Save this comparison as wiki/analyses/memex-vs-rag.md?
+```
+
+#### Feedback & Preferences
+
+You can also tell the LLM your preferences via the query channel:
+
+```
+Always cite sources in answers
+Use tables for comparison questions
+Don't create standalone pages for briefly mentioned concepts
+```
+
+These preferences are recorded in `wiki/conventions.md` and automatically followed in all subsequent operations.
+
+---
+
+### Health Check — `/wiki lint`
+
+Periodically check the wiki's health to find and fix issues. Recommended after every 5–10 material ingests.
+
+#### Usage
 
 ```
 /wiki lint
 ```
 
-#### 两层检查机制
+#### Two-Layer Check Mechanism
 
-| 层 | 工具 | 检查内容 |
-|----|------|---------|
-| **确定性脚本** | `lint.py` | 断链、raw wikilink 误用、frontmatter 完整性、索引一致性、双向链接、孤岛页面、sources 字段 |
-| **LLM 语义补充** | Claude | 语言一致性、矛盾检测、缺失页面、陈旧信息、缺失交叉引用、标签不一致、知识扩展建议 |
+| Layer | Tool | Checks |
+|-------|------|--------|
+| **Deterministic script** | `lint.py` | Broken links, raw wikilink misuse, frontmatter completeness, index consistency, bidirectional links, orphan pages, sources field |
+| **LLM semantic supplement** | Claude | Language consistency, contradiction detection, missing pages, stale info, missing cross-references, tag inconsistency, knowledge expansion suggestions |
 
-#### 问题优先级
+#### Issue Priority
 
-| 级别 | 含义 | 处理方式 |
-|------|------|---------|
-| 🔴 **P0** | 结构性错误，影响知识图谱完整性 | 建议立即修复 |
-| 🟡 **P1** | 质量问题，影响知识准确性 | 逐项确认 |
-| 🟢 **P2** | 优化建议，提升知识库深度 | 仅作建议 |
+| Level | Meaning | Action |
+|-------|---------|--------|
+| 🔴 **P0** | Structural errors affecting knowledge graph integrity | Fix immediately |
+| 🟡 **P1** | Quality issues affecting knowledge accuracy | Review individually |
+| 🟢 **P2** | Optimization suggestions to deepen the knowledge base | Suggestions only |
 
-#### 输出示例
+#### Example Output
 
 ```
-## Wiki 健康检查报告 (2026-04-14)
+## Wiki Health Check Report (2026-04-14)
 
-### 📊 统计
-- 总页面数: 15
-- 素材摘要: 5  |  实体页面: 4  |  概念页面: 5  |  分析页面: 1
+### 📊 Statistics
+- Total pages: 15
+- Source summaries: 5  |  Entity pages: 4  |  Concept pages: 5  |  Analysis pages: 1
 
-### 🔴 P0 — 需要修复
-- [ ] [broken_link] concepts/rag.md: [[llm-training]] 指向不存在的页面
+### 🔴 P0 — Needs Fixing
+- [ ] [broken_link] concepts/rag.md: [[llm-training]] points to non-existent page
 
-### 🟡 P1 — 建议改进
-- [ ] [orphan_page] entities/ted-nelson.md: 孤岛页面，没有其他页面链接到此
+### 🟡 P1 — Suggested Improvements
+- [ ] [orphan_page] entities/ted-nelson.md: Orphan page, no other pages link to it
 
-### 🟢 P2 — 可选优化
-- [ ] 建议为 "RAG" 创建独立概念页（被 3 个页面引用但无独立页）
+### 🟢 P2 — Optional Optimizations
+- [ ] Suggest creating a standalone concept page for "RAG" (referenced by 3 pages but has no page)
 
-🔍 知识扩展建议（基于 web search）:
-- [[memex]] 页面提到了 Ted Nelson 但无详细内容
-  → 推荐: "Ted Nelson and the Xanadu Project"
-  → 优先级: 中
+🔍 Knowledge expansion suggestions (based on web search):
+- [[memex]] page mentions Ted Nelson but lacks detail
+  → Recommended: "Ted Nelson and the Xanadu Project"
+  → Priority: Medium
 ```
 
-也可以单独运行脚本做快速检查：
+You can also run the script standalone for a quick check:
 
 ```bash
-# 人类可读输出
+# Human-readable output
 python ~/.claude/skills/wiki/scripts/lint.py \
   --wiki-dir ~/my-kb/wiki --raw-dir ~/my-kb/raw
 
-# JSON 格式（供程序使用）
+# JSON format (for programmatic use)
 python ~/.claude/skills/wiki/scripts/lint.py \
   --wiki-dir ~/my-kb/wiki --raw-dir ~/my-kb/raw --json
 ```
 
 ---
 
-### 删除与重置 — `/wiki wipe`
+### Delete & Reset — `/wiki wipe`
 
-所有删除操作均有回收站机制，可恢复。原始素材（`raw/`）永远不会被动。
+All delete operations use a recycle bin mechanism and are recoverable. Raw materials (`raw/`) are never touched.
 
-#### 使用方式
+#### Usage
 
-| 命令 | 功能 |
-|------|------|
-| `/wiki wipe` | 交互式选择操作 |
-| `/wiki wipe all` | 全量重置（所有页面移入回收站） |
-| `/wiki wipe <关键词>` | 删除匹配的页面 |
-| `/wiki wipe trash` | 查看回收站内容 |
-| `/wiki wipe restore` | 从回收站恢复页面 |
-| `/wiki wipe empty-trash` | 永久清空回收站（不可逆） |
+| Command | Function |
+|---------|----------|
+| `/wiki wipe` | Interactive selection |
+| `/wiki wipe all` | Full reset (all pages moved to recycle bin) |
+| `/wiki wipe <keyword>` | Delete matching pages |
+| `/wiki wipe trash` | View recycle bin contents |
+| `/wiki wipe restore` | Restore pages from recycle bin |
+| `/wiki wipe empty-trash` | Permanently empty recycle bin (irreversible) |
 
-#### 回收站机制
+#### Recycle Bin Mechanism
 
-- 删除 = 移入 `wiki/.trash/`，按原目录结构存放
-- 例如：`wiki/concepts/swiglu.md` → `wiki/.trash/concepts/swiglu.md`
-- 恢复时自动移回原路径，并重新更新 index.md 和关联页面的链接
-- 永久清空（`empty-trash`）后只能通过 git 恢复
+- Delete = move to `wiki/.trash/`, preserving original directory structure
+- Example: `wiki/concepts/swiglu.md` → `wiki/.trash/concepts/swiglu.md`
+- Restore automatically moves back to original path and re-updates index.md and related page links
+- After permanent deletion (`empty-trash`), recovery is only possible via git
 
 ---
 
-### 自动化测试 — `/wiki test`
+### Automated Testing — `/wiki test`
 
-验证整个系统的完整性。
+Verify the integrity of the entire system.
 
 ```
 /wiki test
 ```
 
-测试覆盖四个维度：
+Tests cover four dimensions:
 
-| 测试项 | 验证内容 |
-|--------|---------|
-| 架构完整性 | 目录结构、核心文件是否完整 |
-| Ingest 工作流 | 使用测试素材跑通完整 ingest 流程 |
-| Query 工作流 | 查询能否正确引用 wiki 页面 |
-| Lint 工作流 | 健康检查能否生成结构化报告 |
-
----
-
-## 自然语言交互
-
-你**不需要记住任何命令**。Second Brain Skill 支持完全用自然语言操作——像和一个懂你知识库的助手对话一样。LLM 会自动判断你的意图，路由到对应的工作流。
-
-### 意图识别
-
-| 你说的话 | LLM 理解为 | 实际执行 |
-|---------|-----------|---------|
-| "收录这篇文章" | 收录素材 | → `ingest` 工作流 |
-| "把 raw 里的新文件加到知识库" | 收录素材 | → `ingest` 工作流 |
-| "Memex 是什么？" | 知识查询 | → `query` 工作流 |
-| "对比 RAG 和 Wiki 模式的优劣" | 知识查询 | → `query` 工作流 |
-| "整理一下目前关于强化学习的信息" | 知识查询 | → `query` 工作流 |
-| "回答要标注来源" | 操作偏好 | → 写入 `conventions.md` |
-| "你上次说错了，其实是 XX" | 内容纠正 | → 修正对应 wiki 页面 |
-| "检查下知识库有没有问题" | 健康检查 | → `lint` 工作流 |
-| "删掉 XX 相关的页面" | 删除内容 | → `wipe` 工作流 |
-
-### 两种使用模式
-
-| 模式 | 适用场景 | 示例 |
-|------|---------|------|
-| **命令模式** `/wiki <cmd>` | 明确知道要做什么操作 | `/wiki ingest`、`/wiki lint` |
-| **自然语言模式** | 日常使用，像对话一样交互 | "这篇论文讲了什么？"、"帮我整理一下 XX" |
-
-两种模式效果完全一致，自然语言模式更适合日常使用——尤其是在 **Web 端（OpenClaw）** 中，自然语言交互体验更好，无需记忆命令格式。
-
-### 反馈即进化
-
-自然语言模式的一个重要特性是**反馈回写**。你对 LLM 操作方式的任何偏好，都会被自动记录到 `wiki/conventions.md`，后续所有操作自动遵守：
-
-```
-你："比较类问题用表格"
-→ 记录到 conventions.md 的 Query 分类下
-
-你："一笔带过的概念不要建独立页"
-→ 记录到 conventions.md 的 Ingest 分类下
-```
-
-知识库会随着你的使用越来越懂你的习惯。
+| Test | Verification |
+|------|-------------|
+| Architecture integrity | Directory structure, core files present |
+| Ingest workflow | Run full ingest flow with test materials |
+| Query workflow | Verify queries correctly reference wiki pages |
+| Lint workflow | Health check generates structured report |
 
 ---
 
-## Obsidian 集成
+## Natural Language Interaction
 
-Obsidian 是浏览和可视化 wiki 的最佳伴侣。LLM 在 Claude Code 中维护知识库，你在 Obsidian 中实时浏览结果。
+You **don't need to remember any commands**. Second Brain Skill supports fully natural language operation — interact with your knowledge base like chatting with an assistant who knows your knowledge. The LLM automatically detects your intent and routes to the corresponding workflow.
 
-### 基础配置
+### Intent Detection
 
-1. 用 Obsidian 打开知识库根目录（如 `~/my-kb/`）
-2. 进行以下推荐配置：
+| What you say | LLM understands | Action taken |
+|-------------|----------------|-------------|
+| "Ingest this article" | Ingest materials | → `ingest` workflow |
+| "Add the new files in raw to the KB" | Ingest materials | → `ingest` workflow |
+| "What is Memex?" | Knowledge query | → `query` workflow |
+| "Compare RAG and Wiki approaches" | Knowledge query | → `query` workflow |
+| "Summarize everything about RL" | Knowledge query | → `query` workflow |
+| "Always cite sources in answers" | Preference | → Write to `conventions.md` |
+| "You were wrong last time, it's actually XX" | Content correction | → Fix corresponding wiki page |
+| "Check if there are any issues with the KB" | Health check | → `lint` workflow |
+| "Delete pages related to XX" | Delete content | → `wipe` workflow |
 
-| 配置项 | 设置 |
-|--------|------|
-| 附件路径 | Settings → Files and links → Attachment folder → `raw/assets/` |
-| 下载附件快捷键 | Settings → Hotkeys → "Download attachments" → `Ctrl+Shift+D` |
+### Two Usage Modes
 
-### 推荐插件
+| Mode | Best for | Example |
+|------|----------|---------|
+| **Command mode** `/wiki <cmd>` | When you know exactly what to do | `/wiki ingest`, `/wiki lint` |
+| **Natural language mode** | Daily use, conversational interaction | "What does this paper say?", "Summarize XX for me" |
 
-| 插件 | 用途 | 必要性 |
-|------|------|--------|
-| **Front Matter Title** | 图谱和文件列表中显示中文标题（而非英文文件名） | 强烈推荐 |
-| **Dataview** | 基于 frontmatter 的元数据查询 | 推荐 |
-| **Web Clipper** | 浏览器中一键将网页裁剪为 Markdown | 推荐 |
-| **Marp Slides** | 浏览 LLM 生成的幻灯片 | 可选 |
+Both modes produce identical results. Natural language mode is better for everyday use — especially on the **web (OpenClaw)**, where conversational interaction feels more natural and requires no command memorization.
 
-### Front Matter Title 插件
+### Feedback as Evolution
 
-项目已预置了 Front Matter Title 插件的配置文件。安装插件后即可生效：
+A key feature of natural language mode is **feedback write-back**. Any preference you express about how the LLM should operate is automatically recorded in `wiki/conventions.md` and followed in all subsequent operations:
 
-**安装**：Settings → Community plugins → Browse → 搜索 "Front Matter Title" → Install → Enable
+```
+You: "Use tables for comparisons"
+→ Recorded under the Query section of conventions.md
 
-**效果**：Obsidian 默认用英文文件名显示节点。插件会读取每个页面 frontmatter 中的 `title` 字段，替换为中文标题。
+You: "Don't create standalone pages for briefly mentioned concepts"
+→ Recorded under the Ingest section of conventions.md
+```
 
-| 替换区域 | 效果 |
-|---------|------|
-| Graph | 图谱节点显示中文标题 |
-| Explorer | 左侧文件列表显示中文标题 |
-| Tab | 标签页标题显示中文 |
-| Search | 搜索结果显示中文标题 |
-| Suggest | `[[` 链接建议弹窗显示中文标题 |
+The knowledge base progressively learns your habits as you use it.
 
-### 图谱视图配置
+---
 
-打开图谱视图后，建议在左上角搜索栏设置过滤条件，隐藏辅助页面：
+## Obsidian Integration
+
+Obsidian is the ideal companion for browsing and visualizing the wiki. The LLM maintains the knowledge base in Claude Code; you browse results in Obsidian in real time.
+
+### Basic Setup
+
+1. Open the knowledge base root directory (e.g., `~/my-kb/`) with Obsidian
+2. Apply the following recommended settings:
+
+| Setting | Configuration |
+|---------|--------------|
+| Attachment path | Settings → Files and links → Attachment folder → `raw/assets/` |
+| Download attachments hotkey | Settings → Hotkeys → "Download attachments" → `Ctrl+Shift+D` |
+
+### Recommended Plugins
+
+| Plugin | Purpose | Necessity |
+|--------|---------|-----------|
+| **Front Matter Title** | Display localized titles in graph and file list (instead of English filenames) | Highly recommended |
+| **Dataview** | Metadata queries based on frontmatter | Recommended |
+| **Web Clipper** | One-click web article clipping in the browser | Recommended |
+| **Marp Slides** | Browse LLM-generated slides | Optional |
+
+### Front Matter Title Plugin
+
+The project includes pre-configured settings for the Front Matter Title plugin. Just install and it works:
+
+**Install**: Settings → Community plugins → Browse → Search "Front Matter Title" → Install → Enable
+
+**Effect**: By default, Obsidian shows English filenames as node labels. The plugin reads the `title` field from each page's frontmatter and replaces it with the localized title.
+
+| Replacement Area | Effect |
+|-----------------|--------|
+| Graph | Graph nodes show localized titles |
+| Explorer | Left sidebar file list shows localized titles |
+| Tab | Tab titles show localized names |
+| Search | Search results show localized titles |
+| Suggest | `[[` link suggestion popup shows localized titles |
+
+### Graph View Configuration
+
+After opening the graph view, set a filter in the top-left search bar to hide auxiliary pages:
 
 ```
 -file:index -file:log -file:overview
 ```
 
-其他推荐设置（点击图谱左上角齿轮图标）：
-- **Show tags**: 开启（在图谱中显示标签节点）
-- **Show attachments**: 关闭
-- **Show orphans**: 开启（方便发现孤岛页面）
+Other recommended settings (click the gear icon in the top-left of the graph):
+- **Show tags**: On (shows tag nodes in the graph)
+- **Show attachments**: Off
+- **Show orphans**: On (helps discover orphan pages)
 
-### Web Clipper 收录流程
+### Web Clipper Ingestion Flow
 
-1. 在浏览器中安装 Obsidian Web Clipper 扩展
-2. 浏览到想收录的文章，点击 Web Clipper 图标
-3. 选择保存到知识库的 `raw/` 目录
-4. （可选）按 `Ctrl+Shift+D` 下载文章中的图片到 `raw/assets/`
-5. 回到 Claude Code 执行 `/wiki ingest`
+1. Install the Obsidian Web Clipper browser extension
+2. Browse to an article you want to ingest, click the Web Clipper icon
+3. Save to the knowledge base's `raw/` directory
+4. (Optional) Press `Ctrl+Shift+D` to download article images to `raw/assets/`
+5. Return to Claude Code and run `/wiki ingest`
 
 ---
 
-## 接入 OpenClaw
+## OpenClaw Integration
 
-[OpenClaw](https://github.com/openclaw/openclaw) ，实现跨设备的知识库管理。
+[OpenClaw](https://github.com/openclaw/openclaw) enables cross-device knowledge base management.
 
-**OpenClaw 是自然语言模式的最佳搭档**——有很多通道可接入，实现对话自由，体验天然适合自然语言交互，你无需记忆任何命令，像和助手聊天一样操作知识库。
+**OpenClaw is the perfect companion for natural language mode** — with multiple input channels available, it provides conversational freedom. The experience is naturally suited for natural language interaction — you don't need to remember any commands, just chat with your knowledge base like talking to an assistant.
 
-### 前提条件
+### Prerequisites
 
-- 已在本地安装好 Skill 并初始化知识库
-- 知识库目录通过 Git 同步或云盘同步到 OpenClaw 可访问的环境
+- Skill installed locally and knowledge base initialized
+- Knowledge base directory synced to OpenClaw's accessible environment via Git or cloud sync
 
-### 配置步骤
+### Setup Steps
 
-1. **确保 Skill 文件就位**：OpenClaw 环境中的 `~/.openclaw/workspace/skills/` 目录需要包含完整的 Skill 文件
-2. **同步知识库**：将知识库目录（含 `raw/` 和 `wiki/`）同步到 OpenClaw 可访问的路径
-3. **更新注册表**：如果路径有变化，修改 `~/.openclaw/workspace/skills/wiki/registries.json` 中的知识库路径
-4. **验证**：在 OpenClaw 中执行 `/wiki help` 确认 Skill 正常加载
+1. **Ensure Skill files are in place**: The `~/.openclaw/workspace/skills/` directory in the OpenClaw environment needs the complete Skill files
+2. **Sync knowledge base**: Sync the knowledge base directory (with `raw/` and `wiki/`) to an OpenClaw-accessible path
+3. **Update registry**: If paths have changed, update the knowledge base path in `~/.openclaw/workspace/skills/wiki/registries.json`
+4. **Verify**: Run `/wiki help` in OpenClaw to confirm the Skill loads correctly
 
-### 使用方式
+### Usage
 
-命令模式和自然语言模式均可使用：
+Both command mode and natural language mode work:
 
-**命令模式**（与本地 CLI 一致）：
+**Command mode** (same as local CLI):
 
 ```
 /wiki ingest
-/wiki query Memex 是什么？
+/wiki query What is Memex?
 /wiki lint
 ```
 
-**自然语言模式**（推荐，更贴合 Web 端交互体验）：
+**Natural language mode** (recommended — better suited for web interaction):
 
 ```
-收录 raw 里的新文章
-Memex 和现代知识管理有什么关系？
-对比一下 RAG 和 Wiki 模式的优劣
-帮我整理一下目前知识库里关于 XX 的信息
-检查下知识库有没有问题
+Ingest the new articles in raw
+What's the relationship between Memex and modern knowledge management?
+Compare the pros and cons of RAG vs Wiki approaches
+Summarize everything in the KB about XX
+Check if there are any issues with the knowledge base
 ```
 
-在 Web 端，你可以像日常聊天一样与知识库交互——提问、收录、纠错、设置偏好，LLM 都能自动识别意图并执行。
+On the web, you can interact with your knowledge base like a regular chat — ask questions, ingest, correct errors, set preferences — the LLM automatically detects intent and executes.
 
-### 进阶：配置记忆实现自动收录
+### Advanced: Configure Memory for Auto-Ingest
 
-通过在 OpenClaw 的记忆（Memory）中写入知识库配置，可以让 LLM **自动识别你发来的素材并收录**——甚至不需要你手动输入任何命令。
+By writing knowledge base configuration into OpenClaw's Memory, you can have the LLM **automatically detect materials you send and ingest them** — without needing to type any commands at all.
 
-#### 配置方法
+#### Configuration
 
-在 OpenClaw 的记忆中添加以下内容：
+Add the following to OpenClaw's memory:
 
 ```
-- 学习知识库：~/Documents/knowledge-wiki，ID: learning-kb，语言: zh
-- 用户发来的前沿知识文章/论文/资料 → 直接存入 ~/Documents/knowledge-wiki/raw/
-- 用户发来微信公众号链接 → 自动 playwright pdf 下载 + 自动 ingest，不用等用户指令
-- /wiki ingest 时统一收录进知识库（也可手动触发）
-- Wiki 技能路径：~/.openclaw/workspace/skills/wiki/
+- Learning KB: ~/Documents/knowledge-wiki, ID: learning-kb
+- When user sends articles/papers/resources → save directly to ~/Documents/knowledge-wiki/raw/
+- When user sends a WeChat article link → auto Playwright PDF download + auto ingest, no need to wait for commands
+- /wiki ingest to batch-ingest into KB (can also be triggered manually)
+- Wiki skill path: ~/.openclaw/workspace/skills/wiki/
 ```
 
-#### 效果
+#### Result
 
-![OpenClaw 自动收录：发链接即入库](images/openclaw-wiki.gif)
+![OpenClaw auto-ingest: send a link, it goes into the KB](images/openclaw-wiki.gif)
 
-配置完成后，你的使用方式可以极其简单：
+After configuration, your workflow becomes extremely simple:
 
-**发一个微信公众号链接**：
+**Send a WeChat article link**:
 
 ```
 https://mp.weixin.qq.com/s/xxxxxxx
 ```
 
-LLM 会自动完成整个流水线：
+The LLM automatically completes the entire pipeline:
 
 ```
-检测到微信公众号链接
-  → Playwright 打开链接，导出为 PDF
-  → 保存到 ~/Documents/knowledge-wiki/raw/
-  → 自动执行 /wiki ingest
-  → 创建摘要页、实体页、概念页
-  → 更新索引和图谱
-✅ 收录完成
+Detected WeChat article link
+  → Playwright opens the link, exports as PDF
+  → Saves to ~/Documents/knowledge-wiki/raw/
+  → Auto-runs /wiki ingest
+  → Creates summary, entity, and concept pages
+  → Updates index and graph
+✅ Ingestion complete
 ```
 
-**发一篇文章或论文**：
+**Send an article or paper**:
 
 ```
-这篇论文讲了一种新的注意力机制：[粘贴内容或文件]
+This paper describes a new attention mechanism: [paste content or file]
 ```
 
-LLM 自动存入 `raw/` 并触发 ingest，全程无需额外指令。
+The LLM automatically saves to `raw/` and triggers ingest — no additional commands needed.
 
-#### 典型工作流
+#### Typical Workflow
 
 ```
-你（在手机/电脑上看到好文章）
-  → 复制链接，发给 OpenClaw
-  → LLM 自动下载、收录、整理
-  → 下次你问相关问题时，知识已经在库里了
+You (spot a great article on your phone/computer)
+  → Copy link, send to OpenClaw
+  → LLM auto-downloads, ingests, and organizes
+  → Next time you ask a related question, the knowledge is already in the KB
 ```
 
-这让知识库的喂养变得零摩擦——看到好内容，随手丢给 OpenClaw 就行。
+This makes feeding your knowledge base zero-friction — see great content, toss it to OpenClaw, done.
 
 ---
 
-## 多知识库管理
+## Multi-KB Management
 
-Second Brain Skill 支持管理多个知识库，通过 `registries.json` 统一注册。
+Second Brain Skill supports managing multiple knowledge bases through a unified `registries.json`.
 
-### 创建多个知识库
+### Creating Multiple KBs
 
 ```
-/wiki init    # 第一次：创建 "AI 研究" 知识库
-/wiki init    # 第二次：创建 "读书笔记" 知识库
+/wiki init    # First time: create "AI Research" KB
+/wiki init    # Second time: create "Book Notes" KB
 ```
 
-### 切换知识库
+### Switching KBs
 
-当存在多个知识库时：
+When multiple KBs exist:
 
-- **有默认库**：操作自动使用默认库，并提示可切换
-- **无默认库**：每次操作前询问使用哪个知识库
+- **Has default**: Operations automatically use the default KB, with a prompt to switch
+- **No default**: Asks which KB to use before each operation
 
-### registries.json 格式
+### registries.json Format
 
 ```json
 {
   "default": "ai-research",
   "registries": {
     "ai-research": {
-      "name": "AI 研究",
+      "name": "AI Research",
       "path": "/Users/you/knowledge/ai-research",
-      "language": "zh",
+      "language": "en",
       "created": "2026-04-13"
     },
     "book-notes": {
-      "name": "读书笔记",
+      "name": "Book Notes",
       "path": "/Users/you/knowledge/book-notes",
-      "language": "zh",
+      "language": "en",
       "created": "2026-04-14"
     }
   }
 }
 ```
 
-修改 `"default"` 字段即可切换默认知识库。
+Change the `"default"` field to switch the default knowledge base.
 
 ---
 
-## 适用场景
+## Use Cases
 
-| 场景 | 说明 | 示例 |
-|------|------|------|
-| **研究** | 持续阅读论文/文章，逐步构建某领域的完整知识图谱 | 收录 AI 论文，自动追踪技术演进、对比不同方法 |
-| **读书** | 按章节收录，自动构建角色、主题、情节线索的关联网络 | 读《指环王》，LLM 自动维护人物关系和事件时间线 |
-| **个人成长** | 日记、文章、播客笔记，构建自我认知的结构化图景 | 收录心理学文章、播客摘要，追踪个人发展主题 |
-| **竞品分析** | 持续跟踪竞品动态，自动维护对比分析 | 收录竞品发布、报告，自动更新对比表格 |
-| **课程笔记** | 逐课收录，自动整理知识体系和概念关联 | 大学课程笔记，LLM 自动整理知识脉络 |
-| **团队知识库** | 收录会议纪要、项目文档，LLM 自动维护 | 团队共享 git 仓库，LLM 帮助整理和检索 |
+| Scenario | Description | Example |
+|----------|-------------|---------|
+| **Research** | Continuously read papers/articles; progressively build a complete domain knowledge graph | Ingest AI papers; auto-track technology evolution and compare methods |
+| **Reading** | Ingest chapter by chapter; auto-build character, theme, and plot association networks | Reading *Lord of the Rings* — LLM auto-maintains character relationships and event timelines |
+| **Personal Growth** | Journals, articles, podcast notes; build a structured landscape of self-knowledge | Ingest psychology articles and podcast summaries; track personal development themes |
+| **Competitive Analysis** | Continuously track competitors; auto-maintain comparison analyses | Ingest competitor releases and reports; auto-update comparison tables |
+| **Course Notes** | Ingest lecture by lecture; auto-organize knowledge systems and concept relationships | University course notes — LLM auto-organizes knowledge structure |
+| **Team KB** | Ingest meeting notes and project docs; LLM auto-maintains | Shared team git repo — LLM helps organize and retrieve |
 
 ---
 
 ## FAQ
 
-### Q: 知识库可以有多大？
+### Q: How large can a knowledge base be?
 
-当前架构在 ~100 个素材、~数百个 wiki 页面的规模下表现良好。`index.md` 配合 Grep 搜索足够高效。如果超过这个规模，建议集成 qmd 等搜索工具。
+The current architecture performs well at ~100 materials and ~hundreds of wiki pages. `index.md` combined with Grep search is efficient enough. Beyond this scale, consider integrating search tools like qmd.
 
-### Q: 支持哪些素材格式？
+### Q: What material formats are supported?
 
-- **Markdown** (`.md`) — 直接读取
-- **PDF** (`.pdf`) — 通过 Read 工具读取
-- **图片** (`.png`, `.jpg` 等) — 通过 Read 工具查看（LLM 原生多模态能力）
+- **Markdown** (`.md`) — Read directly
+- **PDF** (`.pdf`) — Read via the Read tool
+- **Images** (`.png`, `.jpg`, etc.) — Viewed via the Read tool (LLM native multimodal capabilities)
 
-### Q: wiki 页面可以手动编辑吗？
+### Q: Can wiki pages be edited manually?
 
-可以，但不建议。wiki 层由 LLM 完全管理。如果你想纠正内容，通过 `/wiki query` 告诉 LLM 哪里不对，它会自动更新相关页面。如果你想修改操作方式，告诉 LLM 你的偏好，它会记录到 `conventions.md`。
+Yes, but not recommended. The wiki layer is fully managed by the LLM. To correct content, tell the LLM what's wrong via `/wiki query` and it will auto-update the relevant pages. To change how things work, tell the LLM your preferences and it will record them in `conventions.md`.
 
-### Q: 如何备份知识库？
+### Q: How to back up the knowledge base?
 
-知识库就是一个目录下的 Markdown 文件，最佳实践是用 Git 管理：
+The knowledge base is just a directory of Markdown files. Best practice is to manage with Git:
 
 ```bash
 cd ~/my-kb
 git init
 git add -A
-git commit -m "ingest: 收录 XX"
+git commit -m "ingest: ingested XX"
 ```
 
-建议的 commit 时机：每次 ingest 后、lint 修复后。
+Recommended commit timing: after each ingest, after lint fixes.
 
-### Q: 可以在 ChatGPT / Codex 上使用吗？
+### Q: Can this be used with ChatGPT / Codex?
 
-核心理念是通用的（参见 [IDEA.md](https://gist.github.com/karpathy/442a6bf555914893e9891c11519de94f)）。但本项目的 Skill 实现是为 Claude Code 定制的。如果要用于其他 LLM 平台，需要将 Skill 逻辑适配为对应平台的 Agent 规范（如 OpenAI Codex 的 AGENTS.md）。
+The core philosophy is universal (see [IDEA.md](https://gist.github.com/karpathy/442a6bf555914893e9891c11519de94f)). However, this project's Skill implementation is built for Claude Code. To use with other LLM platforms, you'd need to adapt the Skill logic to the target platform's agent specification (e.g., OpenAI Codex's AGENTS.md).
 
-### Q: 收录新素材后，Obsidian 多久能看到变化？
+### Q: How quickly do changes appear in Obsidian after ingesting?
 
-实时。LLM 在 Claude Code 中创建/编辑文件时，Obsidian 会自动检测到文件系统变化并刷新显示。你可以把 Claude Code 放一边、Obsidian 放一边，实时观察知识库的成长。
+Instantly. When the LLM creates/edits files in Claude Code, Obsidian automatically detects filesystem changes and refreshes the display. You can keep Claude Code on one side and Obsidian on the other, watching your knowledge base grow in real time.
 
-### Q: 如何查看知识库的操作历史？
+### Q: How to view knowledge base operation history?
 
-两种方式：
+Two ways:
 
-1. 在 Obsidian 中打开 `wiki/log.md`，查看完整的操作日志
-2. 用命令行快速查看最近操作：
+1. Open `wiki/log.md` in Obsidian to view the complete operation log
+2. Quick CLI view of recent operations:
    ```bash
    grep "^## \[" ~/my-kb/wiki/log.md | head -5
    ```
 
 ---
 
-## 页面规范速查
+## Page Specification Quick Reference
 
-### Frontmatter 模板
+### Frontmatter Template
 
 ```yaml
 ---
-title: 页面标题
-aliases: [中文别名]              # Front Matter Title 插件显示用
+title: Page Title
+aliases: [Alternative names]              # Used by Front Matter Title plugin
 type: source | entity | concept | analysis
 created: 2026-04-13
 updated: 2026-04-13
-tags: [标签1, 标签2]
-sources: [引用的原始素材文件名]
+tags: [tag1, tag2]
+sources: [referenced raw material filenames]
 ---
 ```
 
-### 文件命名规范
+### File Naming Convention
 
-- 全部使用小写英文 + 连字符：`reinforcement-learning.md`
-- 素材摘要页与原始文件同名：`raw/paper-x.pdf` → `wiki/sources/paper-x.md`
-- 文件名控制在 50 字符以内
+- All lowercase English + hyphens: `reinforcement-learning.md`
+- Source summary pages share the same name as the raw file: `raw/paper-x.pdf` → `wiki/sources/paper-x.md`
+- Filenames should be 50 characters or fewer
 
-### 交叉引用语法
+### Cross-Reference Syntax
 
 ```markdown
-[[page-name]]              # 基本链接
-[[page-name|显示文本]]      # 别名链接
+[[page-name]]              # Basic link
+[[page-name|Display Text]] # Alias link
 ```
 
-- 每个页面底部设 `## Related` 区块
-- LLM 自动维护双向链接的完整性
-- 原始素材链接使用普通 Markdown 语法 `[text](path)`，不用 `[[wikilink]]`
+- Each page has a `## Related` section at the bottom
+- The LLM automatically maintains bidirectional link integrity
+- Raw material links use standard Markdown syntax `[text](path)`, not `[[wikilink]]`
 
 ---
 
-> 本手册随项目更新持续完善。反馈和建议请提交到 [GitHub Issues](https://github.com/ChavesLiu/second-brain-skill/issues)。
+> This guide is continuously updated with the project. Feedback and suggestions are welcome at [GitHub Issues](https://github.com/jasonwmcswain/second-brain-skill/issues).

@@ -1,0 +1,12 @@
+{
+  "_comment": "Copy to registries.json and edit. Remove _comment before use.",
+  "default": "my-kb",
+  "registries": {
+    "my-kb": {
+      "name": "My Knowledge Base",
+      "path": "/absolute/path/to/kb",
+      "language": "en",
+      "created": "2026-01-01"
+    }
+  }
+}

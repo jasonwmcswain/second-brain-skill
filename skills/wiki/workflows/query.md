@@ -1,122 +1,122 @@
-# Query 工作流
+# Query Workflow
 
-基于知识库回答用户问题。搜索相关 wiki 页面，综合信息给出带引用的回答。核心理念：**每次查询都应让知识库变得更好**。
+Answer user questions based on the knowledge base. Search relevant wiki pages and synthesize cited answers. Core idea: **every query should make the knowledge base better**.
 
-> 📌 **路径约定**: 本文档中的 `raw/`、`wiki/` 均指当前知识库的绝对路径，由 SKILL.md 路由时确定（`KB_RAW`、`KB_WIKI`）。`KB_LANG` 为当前知识库的语言设置。
+> 📌 **Path convention**: `raw/` and `wiki/` in this document refer to the current knowledge base absolute paths, determined during SKILL.md routing (`KB_RAW`, `KB_WIKI`). `KB_LANG` is the current knowledge base language setting.
 
-## 工作流程
+## Workflow
 
-### 1. 理解问题
+### 1. Understand the question
 
-分析用户的输入，判断其类型：
+Analyze user input and classify:
 
-- **知识查询** — 正常的知识问题 → 继续步骤 2-5
-- **操作偏好/反馈** — 对操作方式的偏好设置（如"回答时要标注来源"） → 直接跳到步骤 4d
-- **答案纠正** — 对上一次回答的纠正（如"你说错了，其实是 XX"） → 跳到步骤 4a 修正对应 wiki 页面
-- **偏好 + 纠正** — 兼有（如"回答太浅了，XX 应该补充 YY"） → 4a 补充内容 + 4d 记录偏好
+- **Knowledge query** — normal knowledge question → continue steps 2-5
+- **Preference/feedback** — preferences about how operations should work (e.g. "always cite sources in answers") → jump to step 4d
+- **Answer correction** — correction of a previous answer (e.g. "you were wrong, it's actually XX") → step 4a to fix the corresponding wiki page
+- **Preference + correction** — both (e.g. "answer was too shallow; XX should include YY") → 4a supplement content + 4d record preference
 
-**设计原则**：wiki 本身就是记忆。内容错误/不足通过修正 wiki 页面解决（下次查询自然答对），不需要额外记"教训"。`conventions.md` 只存偏好规则，不存纠错历史。
+**Design principle**: the wiki is the memory. Content errors/gaps are fixed by updating wiki pages (next query answers correctly); no separate "lesson learned" store. `conventions.md` holds preference rules only, not correction history.
 
-如果是正常知识查询，识别关键词、涉及的实体和概念。
+For normal knowledge queries, identify keywords, entities, and concepts involved.
 
-### 2. 检索相关页面
+### 2. Retrieve relevant pages
 
-按顺序检索：
-1. 读取 `wiki/index.md`，根据问题关键词定位可能相关的页面
-2. **检查 `wiki/analyses/` 是否已有相关的历史分析**（避免重复劳动，在已有分析基础上深化）
-3. 读取定位到的 wiki 页面
-4. 如果需要更多上下文，使用 Grep 在 `wiki/` 目录下搜索关键词
-5. 如果涉及原始数据，查阅 `raw/` 下的原始素材
+Search in order:
+1. Read `wiki/index.md` and locate likely relevant pages by keywords
+2. **Check whether `wiki/analyses/` already has related prior analysis** (avoid duplicate work; deepen existing analysis)
+3. Read located wiki pages
+4. If more context needed, Grep `wiki/` for keywords
+5. If raw data is involved, consult materials under `raw/`
 
-### 3. 综合回答
+### 3. Synthesize answer
 
-基于检索到的信息，生成结构化回答：
-- 直接回答问题
-- 引用具体的 wiki 页面作为来源：`（参见 [[page-name]]）`
-- **如果存在相关的历史分析，在此基础上深化**，而非从头开始
-- 如果信息不足，明确说明知识库中缺少哪些信息
-- 如果存在矛盾信息，列出不同来源的不同说法
+Based on retrieved information, produce a structured answer:
+- Answer the question directly
+- Cite specific wiki pages: `(see [[page-name]])`
+- **If related prior analysis exists, deepen it** rather than starting from scratch
+- If information is insufficient, state what the knowledge base lacks
+- If contradictory information exists, list different claims from different sources
 
-### 4. 知识回写（自进化核心）
+### 4. Knowledge write-back (self-evolution core)
 
-每次 query 完成后，评估回答是否产生了新知识，按以下规则处理：
+After each query, evaluate whether the answer produced new knowledge:
 
-#### 4a. 自动回写（不需用户确认）
+#### 4a. Auto write-back (no user confirmation)
 
-以下情况直接更新已有页面，无需询问：
-- **补充信息**: 回答中综合出了某个 entity/concept 页面尚未记录的信息 → 在该页面追加内容，更新 updated 日期
-- **新增交叉引用**: 回答过程中发现了之前未关联的页面之间的联系 → 在双方的 Related 区块添加链接
-- **修正小错误**: 回答过程中发现页面中的事实性错误 → 直接修正
+Update existing pages directly in these cases:
+- **Supplement info**: answer synthesizes information not yet on an entity/concept page → append to that page, update `updated` date
+- **New cross-references**: answer reveals links between pages not previously connected → add links in both Related sections
+- **Minor fixes**: factual errors found during answering → fix directly
 
-#### 4b. 建议回写（需用户确认）
+#### 4b. Suggested write-back (user confirmation)
 
-以下情况向用户建议，确认后执行：
-- **值得独立成页的分析**: 比较分析、综合论述、新发现的关联 → 保存为 `wiki/analyses/` 下的新页面
-- **新实体/概念**: 回答中涉及了 wiki 里还没有的重要实体或概念 → 建议创建新页面
-- **矛盾发现**: 回答过程中发现已有页面间的矛盾 → 建议标注
+Suggest to user; execute after confirmation:
+- **Analysis worth its own page**: comparisons, syntheses, newly discovered connections → save under `wiki/analyses/`
+- **New entity/concept**: important entity/concept not yet in wiki → suggest new page
+- **Contradiction found**: contradiction between existing pages → suggest marking
 
-建议格式：
+Suggestion format:
 ```
-📝 本次查询产生了以下知识更新：
+📝 Knowledge updates from this query:
 
-自动更新:
-  - 更新了 [[memex]] 页面，补充了与现代 RAG 系统的对比
-  - 在 [[vannevar-bush]] 和 [[knowledge-management]] 之间添加了交叉引用
+Auto-updated:
+  - Updated [[memex]] page with comparison to modern RAG systems
+  - Added cross-reference between [[vannevar-bush]] and [[knowledge-management]]
 
-建议操作:
-  - 💡 将本次对比分析保存为 wiki/analyses/memex-vs-rag.md？
-  - 💡 为 "RAG" 创建新的概念页 wiki/concepts/rag.md？
+Suggested actions:
+  - 💡 Save this comparison as wiki/analyses/memex-vs-rag.md?
+  - 💡 Create new concept page wiki/concepts/rag.md for "RAG"?
 ```
 
-#### 4d. 用户反馈回写（自动执行）
+#### 4d. User feedback write-back (automatic)
 
-当用户输入是操作偏好或反馈（而非知识查询）时触发。
+Triggered when user input is operational preference or feedback (not a knowledge query).
 
-**分类规则：**
+**Classification rules:**
 
-| 分类 | 判断依据 | 示例 |
+| Category | Criteria | Examples |
 |------|---------|------|
-| Query | 涉及回答方式、输出格式、引用风格 | "回答要标注来源"、"比较类问题用表格" |
-| Ingest | 涉及收录策略、页面拆分、命名偏好 | "一笔带过的概念不要建独立页"、"实体页标题用中文" |
-| Lint | 涉及检查偏好、修复策略 | "P2 问题不用报告"、"断链自动修复不用确认" |
-| 通用 | 跨操作的通用偏好 | "所有操作用中文回复"、"操作完成后给一行摘要就行" |
+| Query | Answer style, output format, citation style | "Always cite sources", "Use tables for comparisons" |
+| Ingest | Ingestion strategy, page splitting, naming preferences | "Don't create standalone pages for briefly mentioned concepts" |
+| Lint | Check preferences, fix strategy | "Don't report P2 issues", "Auto-fix broken links without confirmation" |
+| General | Cross-operation preferences | "Reply in English for all operations", "One-line summary after each operation" |
 
-**执行步骤：**
-1. 读取 `wiki/conventions.md`（如不存在则按初始模板创建）
-2. 判断分类，将反馈以 `- ` 列表项追加到对应区块下
-3. **去重**：如果已有语义相同的条目，更新已有条目而非重复添加
-4. **精炼**：如果同一分类条目 > 10 条，合并语义相近的条目为更精炼的规则
-5. 更新 `updated` 日期
-6. 告知用户已记录到哪个分类
+**Steps:**
+1. Read `wiki/conventions.md` (create from initial template if missing)
+2. Classify feedback and append as `- ` list items under the matching section
+3. **Deduplicate**: if a semantically identical entry exists, update it instead of duplicating
+4. **Refine**: if a section has > 10 items, merge similar entries into tighter rules
+5. Update `updated` date
+6. Tell the user which section was updated
 
-> ⚠️ 不要将操作偏好存到 Claude Code memory，统一存入知识库自身的 `conventions.md`。
+> ⚠️ Do not store operational preferences in Claude Code memory; use the knowledge base's own `conventions.md`.
 
-#### 4c. 回写执行
+#### 4c. Write-back execution
 
-用户确认后：
-- 创建新页面（含完整 frontmatter 和 Related 区块）
-- 更新相关已有页面的 Related 区块（双向链接）
-- 更新 `wiki/index.md`
-- 更新 `wiki/overview.md`（如果统计数据变化）
-- 在 `wiki/log.md` 记录，格式：`## [YYYY-MM-DD] query | 问题简述`
+After user confirms:
+- Create new pages (full frontmatter and Related section)
+- Update Related sections on related existing pages (bidirectional links)
+- Update `wiki/index.md`
+- Update `wiki/overview.md` if statistics changed
+- Record in `wiki/log.md`: `## [YYYY-MM-DD] query | brief question summary`
 
-### 5. 回答格式
+### 5. Answer format
 
-根据问题类型选择最佳格式：
-- **事实查询**: 简短直接的回答 + 引用
-- **比较分析**: Markdown 表格
-- **综合论述**: 结构化长文
-- **时间线**: 按时间排列的列表
-- **概览**: 思维导图式的层级列表
-- **幻灯片**: Marp 格式的 slide deck（适合汇报和分享）
-- **图表**: 使用 matplotlib 生成可视化图表（适合数据对比、趋势分析）
-- **Canvas**: Obsidian Canvas 格式（适合关系图、流程图）
+Choose the best format by question type:
+- **Fact lookup**: short direct answer + citations
+- **Comparison**: Markdown table
+- **Synthesis**: structured long-form
+- **Timeline**: chronological list
+- **Overview**: hierarchical mind-map style list
+- **Presentation**: Marp slide deck (good for reports and sharing)
+- **Charts**: matplotlib visualizations (data comparison, trends)
+- **Canvas**: Obsidian Canvas format (relationship/flow diagrams)
 
-## 注意事项
+## Notes
 
-- **语言**: 使用 `KB_LANG` 设置，回答和新建页面统一用目标语言
-- 优先使用 wiki 中已有的综合信息，而非每次重新从原始素材推导
-- **历史分析复用**: 如果 analyses/ 下已有相关分析，在其基础上深化而非重复
-- 明确区分"wiki 中记录的信息"和"LLM 自身知识"
-- 如果问题完全超出知识库范围，告知用户并建议收录相关素材
-- 自动回写时保持克制：只补充确定性高的信息，不添加推测性内容
+- **Language**: use `KB_LANG`; answers and new pages use the target language
+- Prefer synthesized wiki information over re-deriving from raw materials each time
+- **Reuse prior analysis**: if analyses/ has related work, deepen it rather than repeat
+- Clearly separate "information recorded in wiki" from "LLM's own knowledge"
+- If the question is entirely outside the knowledge base, tell the user and suggest ingesting relevant materials
+- Stay conservative on auto write-back: only add high-confidence information, not speculation

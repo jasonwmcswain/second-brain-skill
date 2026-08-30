@@ -1,18 +1,18 @@
 #!/usr/bin/env python3
 """
-Second Brain 确定性路由脚本。
-解析子命令、选择知识库、输出路径变量，让 LLM 跳过路由直接进入工作流。
+Second Brain deterministic routing script.
+Parses subcommands, selects knowledge base, outputs path variables so the LLM can skip routing and enter workflows directly.
 
-用法:
+Usage:
     python router.py ingest
     python router.py ingest paper.pdf
-    python router.py query "Memex 是什么？"
+    python router.py query "What is Memex?"
     python router.py lint
     python router.py wipe all
     python router.py init
     python router.py help
 
-输出 JSON:
+Output JSON:
     {
         "status": "ok",
         "subcommand": "ingest",
@@ -21,15 +21,15 @@ Second Brain 确定性路由脚本。
         "schema": "SCHEMA.md",
         "kb": {
             "id": "ai-research",
-            "name": "AI 研究",
+            "name": "AI Research",
             "root": "/path/to/kb",
             "wiki": "/path/to/kb/wiki",
             "raw": "/path/to/kb/raw",
-            "lang": "zh"
+            "lang": "en"
         }
     }
 
-多知识库时输出 status=select，附带候选列表让 LLM 询问用户。
+When multiple knowledge bases exist, outputs status=select with a candidate list for the LLM to ask the user.
 """
 
 import json
@@ -42,10 +42,10 @@ REGISTRIES_FILE = SKILL_DIR / "registries.json"
 
 VALID_SUBCOMMANDS = {"init", "ingest", "query", "lint", "wipe", "test", "help"}
 
-# 不需要 KB 选择的子命令
+# Subcommands that do not require KB selection
 NO_KB_REQUIRED = {"init", "help"}
 
-# 需要读 SCHEMA.md 的子命令（会创建/修改 wiki 页面）
+# Subcommands that need SCHEMA.md (create/modify wiki pages)
 NEEDS_SCHEMA = {"ingest", "query", "lint", "wipe"}
 
 
@@ -53,23 +53,75 @@ def load_registries() -> dict:
     if not REGISTRIES_FILE.exists():
         return {"default": None, "registries": {}}
     with open(REGISTRIES_FILE, "r", encoding="utf-8") as f:
-        return json.load(f)
+        data = json.load(f)
+    if not isinstance(data, dict):
+        raise ValueError("registries.json must be a JSON object")
+    if "registries" in data and not isinstance(data["registries"], dict):
+        raise ValueError("registries.json 'registries' field must be an object")
+    return data
+
+
+def validate_registry_entry(kb_id: str, kb_data: object) -> str | None:
+    """Return error message if entry is invalid, else None."""
+    if not isinstance(kb_data, dict):
+        return f"Registry entry '{kb_id}' must be an object"
+    name = kb_data.get("name")
+    path = kb_data.get("path")
+    if not isinstance(name, str) or not name.strip():
+        return f"Registry entry '{kb_id}': 'name' must be a non-empty string"
+    if not isinstance(path, str) or not path.strip():
+        return f"Registry entry '{kb_id}': 'path' must be a non-empty string"
+    return None
+
+
+def validate_kb_path(path_str: str) -> tuple[Path | None, str | None]:
+    """Resolve KB path to absolute and reject traversal. Returns (path, error)."""
+    if ".." in Path(path_str).parts:
+        return None, f"Knowledge base path must not contain '..': {path_str}"
+    try:
+        resolved = Path(path_str).expanduser().resolve()
+    except (OSError, RuntimeError) as exc:
+        return None, f"Invalid knowledge base path: {path_str} ({exc})"
+    if not resolved.is_absolute():
+        return None, f"Knowledge base path must resolve to an absolute path: {path_str}"
+    if ".." in resolved.parts:
+        return None, f"Knowledge base path contains path traversal: {path_str}"
+    return resolved, None
+
+
+def validate_registries(registries: dict) -> dict | None:
+    """Validate registries structure and paths. Return error dict or None."""
+    kbs = registries.get("registries", {})
+    if not isinstance(kbs, dict):
+        return {
+            "status": "error",
+            "message": "registries.json 'registries' field must be an object",
+            "skill_dir": str(SKILL_DIR),
+        }
+    for kb_id, kb_data in kbs.items():
+        if err := validate_registry_entry(kb_id, kb_data):
+            return {"status": "error", "message": err, "skill_dir": str(SKILL_DIR)}
+        _, path_err = validate_kb_path(kb_data["path"])
+        if path_err:
+            return {"status": "error", "message": path_err, "skill_dir": str(SKILL_DIR)}
+    return None
 
 
 def make_kb_info(kb_id: str, kb_data: dict) -> dict:
-    root = kb_data["path"]
+    root_path, _ = validate_kb_path(kb_data["path"])
+    root = str(root_path)
     return {
         "id": kb_id,
         "name": kb_data["name"],
         "root": root,
         "wiki": f"{root}/wiki",
         "raw": f"{root}/raw",
-        "lang": kb_data.get("language", "zh"),
+        "lang": kb_data.get("language", "en"),
     }
 
 
 def route(args: list[str]) -> dict:
-    # 解析子命令
+    # Parse subcommand
     if not args:
         return {
             "status": "ok",
@@ -87,7 +139,7 @@ def route(args: list[str]) -> dict:
     if subcommand not in VALID_SUBCOMMANDS:
         return {
             "status": "error",
-            "message": f"未知子命令: {subcommand}",
+            "message": f"Unknown subcommand: {subcommand}",
             "valid_subcommands": sorted(VALID_SUBCOMMANDS),
             "skill_dir": str(SKILL_DIR),
         }
@@ -102,42 +154,59 @@ def route(args: list[str]) -> dict:
         "skill_dir": str(SKILL_DIR),
     }
 
-    # help 和 init 不需要选库
+    # help and init do not need KB selection
     if subcommand in NO_KB_REQUIRED:
         return result
 
-    # 需要选库的命令
-    registries = load_registries()
+    # Commands that need KB selection
+    try:
+        registries = load_registries()
+    except (json.JSONDecodeError, ValueError) as exc:
+        return {
+            "status": "error",
+            "message": f"Invalid registries.json: {exc}",
+            "skill_dir": str(SKILL_DIR),
+        }
+
+    if err := validate_registries(registries):
+        return err
+
     kbs = registries.get("registries", {})
 
     if not kbs:
         return {
             "status": "no_kb",
-            "message": "尚未注册任何知识库。请先运行 /wiki init 创建一个知识库。",
+            "message": "No knowledge base registered yet. Run /wiki init to create one first.",
             "skill_dir": str(SKILL_DIR),
         }
 
     if len(kbs) == 1:
-        # 唯一知识库，自动选择
+        # Single KB — auto-select
         kb_id = next(iter(kbs))
         kb_data = kbs[kb_id]
 
-        # 验证路径存在
-        root = Path(kb_data["path"])
+        # Verify path exists
+        root, path_err = validate_kb_path(kb_data["path"])
+        if path_err:
+            return {
+                "status": "error",
+                "message": path_err,
+                "skill_dir": str(SKILL_DIR),
+            }
         if not root.exists():
             return {
                 "status": "error",
-                "message": f"知识库路径不存在: {kb_data['path']}",
+                "message": f"Knowledge base path does not exist: {root}",
                 "skill_dir": str(SKILL_DIR),
             }
 
         result["kb"] = make_kb_info(kb_id, kb_data)
         return result
 
-    # 多个知识库，检查是否有 default
+    # Multiple KBs — check for default
     default_id = registries.get("default")
     if default_id and default_id in kbs:
-        # 有默认知识库，使用它但告知 LLM
+        # Use default KB but inform the LLM
         result["kb"] = make_kb_info(default_id, kbs[default_id])
         result["multiple_kbs"] = True
         result["kb_list"] = [
@@ -146,9 +215,9 @@ def route(args: list[str]) -> dict:
         ]
         return result
 
-    # 多个知识库且无默认，需要 LLM 询问用户
+    # Multiple KBs with no default — LLM must ask user
     result["status"] = "select"
-    result["message"] = "有多个知识库，请询问用户选择。"
+    result["message"] = "Multiple knowledge bases found. Ask the user to choose."
     result["kb_list"] = [
         {"id": kid, "name": kd["name"], "path": kd["path"]}
         for kid, kd in kbs.items()
