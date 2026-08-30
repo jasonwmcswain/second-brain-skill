@@ -1,55 +1,48 @@
-# Init 工作流
+# Init Workflow
 
-创建并注册一个新的知识库。
+Create and register a new knowledge base.
 
-## 工作流程
+## Workflow
 
-### 1. 收集信息
+### 1. Collect information
 
-使用 AskUserQuestion 询问以下信息：
+Use AskUserQuestion to ask for the following:
 
 ```json
 {
   "questions": [
     {
-      "question": "知识库根目录路径？（将在此路径下创建 raw/ 和 wiki/ 子目录）",
-      "header": "路径",
+      "question": "Knowledge base root directory path? (raw/ and wiki/ subdirectories will be created here)",
+      "header": "Path",
       "multiSelect": false,
       "options": [
-        {"label": "当前目录", "description": "使用当前工作目录作为知识库根目录"},
-        {"label": "自定义路径", "description": "指定一个绝对路径"}
+        {"label": "Current directory", "description": "Use the current working directory as the knowledge base root"},
+        {"label": "Custom path", "description": "Specify an absolute path"}
       ]
     },
     {
-      "question": "给知识库起个名称（用于多库切换时显示）",
-      "header": "名称",
+      "question": "Name for this knowledge base (shown when switching between multiple KBs)",
+      "header": "Name",
       "multiSelect": false,
       "options": [
-        {"label": "AI 研究", "description": ""},
-        {"label": "读书笔记", "description": ""},
-        {"label": "工作知识库", "description": ""}
-      ]
-    },
-    {
-      "question": "Wiki 页面使用什么语言撰写？",
-      "header": "语言",
-      "multiSelect": false,
-      "options": [
-        {"label": "zh（中文）", "description": "用中文撰写 wiki 内容，专有名词保留英文原文"},
-        {"label": "en（English）", "description": "Write all wiki content in English"}
+        {"label": "AI Research", "description": ""},
+        {"label": "Book Notes", "description": ""},
+        {"label": "Work Knowledge Base", "description": ""}
       ]
     }
   ]
 }
 ```
 
-### 2. 生成知识库 ID
+Wiki pages are always written in English (`language: "en"`).
 
-从名称生成 slug 作为 ID（如 "AI 研究" → "ai-research"）。如果 registries.json 中已存在该 ID，提示用户修改。
+### 2. Generate knowledge base ID
 
-### 3. 创建目录结构
+Generate a slug from the name as ID (e.g. "AI Research" → "ai-research"). If the ID already exists in registries.json, prompt the user to change it.
 
-在目标路径下创建：
+### 3. Create directory structure
+
+Create under the target path:
 
 ```bash
 mkdir -p <path>/raw/assets
@@ -59,22 +52,22 @@ mkdir -p <path>/wiki/concepts
 mkdir -p <path>/wiki/analyses
 ```
 
-### 4. 初始化 wiki 核心文件
+### 4. Initialize wiki core files
 
-创建以下文件（如果不存在）：
+Create the following files (if they do not exist):
 
 #### `<path>/wiki/index.md`
 
 ```markdown
 # Wiki Index
 
-> 此文件由 LLM 自动维护，是 wiki 的内容目录。按类别组织所有页面，每页一行摘要。
-> LLM 在回答查询时优先阅读此文件以定位相关页面。
+> This file is auto-maintained by the LLM and serves as the wiki content directory. Organizes all pages by category with a one-line summary each.
+> The LLM reads this file first when answering queries to locate relevant pages.
 
 ## Overview
 
-- [Overview](overview.md) — Wiki 总览与当前知识图谱摘要
-- [使用约定](conventions.md) — 用户对本知识库的操作偏好
+- [Overview](overview.md) — Wiki overview and current knowledge graph summary
+- [Conventions](conventions.md) — User preferences for operating this knowledge base
 
 ## Sources
 
@@ -90,136 +83,136 @@ mkdir -p <path>/wiki/analyses
 ```markdown
 # Wiki Log
 
-> 操作日志，按时间倒序记录所有 wiki 操作。
+> Operation log recording all wiki operations in reverse chronological order.
 
-## [YYYY-MM-DD] init | 知识库初始化
+## [YYYY-MM-DD] init | Knowledge base initialized
 
-- 创建知识库目录结构
-- 初始化 index.md、log.md、overview.md、conventions.md
+- Created knowledge base directory structure
+- Initialized index.md, log.md, overview.md, conventions.md
 ```
 
-（YYYY-MM-DD 替换为当天日期）
+(Replace YYYY-MM-DD with today's date)
 
 #### `<path>/wiki/overview.md`
 
 ```markdown
 ---
 title: Overview
-aliases: [总览]
+aliases: [Overview]
 type: overview
 created: YYYY-MM-DD
 updated: YYYY-MM-DD
 tags: [overview]
 ---
 
-# 知识库总览
+# Knowledge Base Overview
 
-## 统计
+## Statistics
 
-| 指标 | 数量 |
+| Metric | Count |
 |------|------|
-| 原始素材 | 0 |
-| 素材摘要 | 0 |
-| 实体页面 | 0 |
-| 概念页面 | 0 |
-| 分析页面 | 0 |
+| Raw materials | 0 |
+| Source summaries | 0 |
+| Entity pages | 0 |
+| Concept pages | 0 |
+| Analysis pages | 0 |
 
-## 知识图谱摘要
+## Knowledge Graph Summary
 
-（尚无内容，收录素材后自动更新）
+(No content yet — will auto-update after ingesting materials)
 
-## 近期活动
+## Recent Activity
 
-- [YYYY-MM-DD] 知识库初始化
+- [YYYY-MM-DD] Knowledge base initialized
 ```
 
 #### `<path>/wiki/conventions.md`
 
 ```markdown
 ---
-title: 使用约定
-aliases: [约定]
+title: Conventions
+aliases: [Conventions]
 type: conventions
 created: YYYY-MM-DD
 updated: YYYY-MM-DD
 tags: [meta]
 ---
 
-# 使用约定
+# Conventions
 
-> 此页面记录用户对本知识库操作的偏好和约定。LLM 在执行任何操作前应先读取此页面。
+> This page records user preferences and conventions for operating this knowledge base. The LLM should read this page before any operation.
 
 ## Query
 
-（暂无）
+(None yet)
 
 ## Ingest
 
-（暂无）
+(None yet)
 
 ## Lint
 
-（暂无）
+(None yet)
 
-## 通用
+## General
 
-（暂无）
+(None yet)
 ```
 
-### 5. 注册到 registries.json
+### 5. Register in registries.json
 
-读取 skill 目录下的 `registries.json`，添加新条目：
+Read `registries.json` in the skill directory and add a new entry:
 
 ```json
 {
   "default": "<new-id>",
   "registries": {
     "<new-id>": {
-      "name": "用户输入的名称",
+      "name": "User-provided name",
       "path": "/absolute/path/to/kb",
-      "language": "zh",
+      "language": "en",
       "created": "YYYY-MM-DD"
     }
   }
 }
 ```
 
-将 `default` 设为新创建的知识库 ID。
+Set `default` to the newly created knowledge base ID.
 
-### 6. 处理已存在目录
+### 6. Handle existing directory
 
-如果目标路径已存在且包含 `raw/` 和 `wiki/` 子目录：
+If the target path already exists and contains `raw/` and `wiki/` subdirectories:
 
 ```json
 {
   "questions": [{
-    "question": "目标路径已存在知识库结构（包含 raw/ 和 wiki/）。如何处理？",
-    "header": "已有目录",
+    "question": "Target path already has a knowledge base structure (contains raw/ and wiki/). How to proceed?",
+    "header": "Existing directory",
     "multiSelect": false,
     "options": [
-      {"label": "直接注册", "description": "跳过创建，仅将已有知识库注册到配置中"},
-      {"label": "覆盖初始化", "description": "重新创建 wiki 核心文件（raw/ 保留不动）"},
-      {"label": "取消", "description": "不做任何操作"}
+      {"label": "Register only", "description": "Skip creation; register the existing knowledge base in config"},
+      {"label": "Re-initialize", "description": "Recreate wiki core files (raw/ is left untouched)"},
+      {"label": "Cancel", "description": "Do nothing"}
     ]
   }]
 }
 ```
 
-### 7. 输出结果
+### 7. Output result
 
 ```
-✅ 知识库已创建并注册
+✅ Knowledge base created and registered
 
-  名称: <name>
-  路径: <path>
-  语言: zh
+  Name: <name>
+  Path: <path>
+  Language: en
   ID:   <id>
 
-  目录结构:
-    <path>/raw/          ← 将素材放入此目录
-    <path>/wiki/         ← LLM 维护的知识库
+  Directory structure:
+    <path>/raw/          ← Place materials here
+    <path>/wiki/         ← LLM-maintained knowledge base
 
-  下一步:
-    1. 将素材文件放入 <path>/raw/
-    2. 执行 /wiki ingest 开始收录
+  Next steps:
+    1. Place material files in <path>/raw/
+    2. Run /wiki ingest to start ingesting
 ```

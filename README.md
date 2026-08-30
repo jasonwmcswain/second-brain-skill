@@ -1,155 +1,153 @@
 # Second Brain Skill
 
-**中文** | [English](README.en.md)
+> Plug your second brain into Claude Code. Inspired by [Karpathy's LLM Wiki](https://gist.github.com/karpathy/442a6bf555914893e9891c11519de94f), this project packages personal knowledge as a Skill, turning AI into an assistant that truly understands your context.
 
-> 把你的第二大脑接入 Claude Code。基于 [Karpathy LLM Wiki](https://gist.github.com/karpathy/442a6bf555914893e9891c11519de94f) 的理念，将个人知识封装成 Skill，让 AI 成为真正理解你上下文的助手。
+Traditional RAG is an **interpreter** — every query re-retrieves and reasons over raw documents from scratch. Second Brain Skill is a **compiler** — the LLM pre-compiles materials into a structured wiki, and knowledge **compounds over time**.
 
-传统 RAG 是**解释器**——每次提问都从原始文档重新检索推理。Second Brain Skill 是**编译器**——LLM 预先将素材编译为结构化的 wiki，知识随时间**持续复利增长**。
+You curate materials and ask good questions; the LLM handles all the heavy lifting — summarization, cross-referencing, archiving, and consistency maintenance.
 
-你负责挑选素材、提出好问题；LLM 负责所有繁重的整理——摘要、交叉引用、归档、一致性维护。
+## Demo
 
-## 演示
+![Demo: help → init → ingest → query full workflow](docs/images/guide.gif)
 
-![演示：help → init → ingest → query 完整流程](docs/images/guide.gif)
+## Three-Layer Architecture
 
-## 三层架构
+| Layer | Location | Writer | Reader | Contents |
+|:-----:|----------|:------:|:------:|----------|
+| **Raw Materials** | `raw/` | You | LLM | Papers, articles, notes, PDFs, images |
+| **Knowledge Base** | `wiki/` | LLM | You | Summaries, entities, concepts, analyses, cross-references |
+| **Spec** | `Skill` | Co-evolve | LLM | SCHEMA, workflows, scripts |
 
-| 层 | 位置 | 谁写 | 谁读 | 包含内容 |
-|:--:|------|:----:|:----:|----------|
-| **原始素材** | `raw/` | 你 | LLM | 论文、文章、笔记、PDF、图片 |
-| **知识库** | `wiki/` | LLM | 你 | 摘要、实体、概念、分析、交叉引用 |
-| **规范** | `Skill` | 共同演进 | LLM | SCHEMA、workflows、scripts |
+## Quick Start
 
-## 快速开始
-
-### 1. 安装
+### 1. Install
 
 ```bash
-# 克隆仓库
-git clone https://github.com/ChavesLiu/second-brain-skill.git
+# Clone the repo
+git clone https://github.com/jasonwmcswain/second-brain-skill.git
 
-# 将 skill 复制到 Claude Code 全局目录
+# Copy the skill to Claude Code's global directory
 cp -r second-brain-skill/skills/wiki ~/.claude/skills/wiki
 
-# 安装依赖
+# Install dependencies
 pip install -r ~/.claude/skills/wiki/scripts/requirements.txt
 ```
 
-### 2. 初始化知识库
+### 2. Initialize a Knowledge Base
 
 ```
 /wiki init
 ```
 
-按提示选择路径、名称和语言（zh/en），即可创建知识库。
+Follow the prompts to choose a path and name for your knowledge base (English wiki content).
 
-### 3. 收录第一份素材
+### 3. Ingest Your First Material
 
 ```bash
-# 将素材放入 raw/ 目录
+# Place materials in the raw/ directory
 cp my-article.md ~/my-kb/raw/
 
-# 收录
+# Ingest
 /wiki ingest
 ```
 
-LLM 自动阅读素材、创建摘要页、拆分实体和概念页、维护交叉引用。一次收录可能触发 10-15 个页面的创建或更新。
+The LLM automatically reads the material, creates summary pages, splits out entity and concept pages, and maintains cross-references. A single ingest may trigger the creation or update of 10–15 pages.
 
-### 4. 查询知识
-
-```
-/wiki query Memex 是什么？
-```
-
-也可以直接用自然语言：
+### 4. Query Your Knowledge
 
 ```
-对比一下 RAG 和 Wiki 模式的优劣
+/wiki query What is Memex?
 ```
 
-## 核心命令
-
-| 命令 | 功能 |
-|------|------|
-| `/wiki init` | 创建并注册新知识库 |
-| `/wiki ingest` | 收录新素材（支持 Markdown、PDF、图片） |
-| `/wiki query <问题>` | 基于知识库回答问题 |
-| `/wiki lint` | 知识库健康检查 |
-| `/wiki wipe` | 删除/重置（有回收站，可恢复） |
-| `/wiki test` | 自动化测试 |
-
-所有命令也支持**自然语言**触发——"收录这篇文章"、"检查下知识库"、"整理 XX 的信息"，LLM 会自动识别意图。
-
-## 自然语言模式
-
-你不需要记住任何命令。Skill 会自动判断你的意图：
-
-| 你说的话 | 执行的操作 |
-|---------|-----------|
-| "收录这篇文章" | ingest |
-| "Memex 是什么？" | query |
-| "对比 RAG 和 Wiki 模式" | query |
-| "回答要标注来源" | 记录偏好到 conventions.md |
-| "检查下知识库" | lint |
-
-这在 Web 端（OpenClaw）中体验尤其好——像聊天一样操作知识库。
-
-## Obsidian 集成
-
-用 [Obsidian](https://obsidian.md/) 打开知识库目录，即可实时浏览图谱视图、反向链接和页面内容。
-
-![Obsidian 知识图谱视图](docs/images/obsidian.png)
-
-推荐插件：
-
-- **Front Matter Title** — 图谱节点显示中文标题（项目已预置配置）
-- **Dataview** — 基于 frontmatter 的元数据查询
-- **Web Clipper** — 浏览器一键裁剪网页文章到 raw/
-
-## OpenClaw（Web 端）
-
-在 OpenClaw 记忆中配置知识库路径后，可以实现**零摩擦收录**——发一个微信公众号链接，LLM 自动下载、收录、整理，全程无需额外指令。
-
-![OpenClaw 自动收录演示](docs/images/openclaw-wiki.gif)
-
-详见 [使用手册 — 接入 OpenClaw](docs/user-guide.md#接入-openclawclaude-code-web)。
-
-## 知识库目录结构
+Or just use natural language:
 
 ```
-~/my-kb/                        # 知识库实例
-├── raw/                        #   原始素材（你写入，LLM 只读）
-│   ├── assets/                 #     图片和附件
-│   └── *.md / *.pdf            #     素材文件
-└── wiki/                       #   LLM 生成和维护的知识库
-    ├── index.md                #     内容索引
-    ├── log.md                  #     操作日志
-    ├── overview.md             #     总览页
-    ├── conventions.md          #     使用约定（你的操作偏好）
-    ├── sources/                #     素材摘要页
-    ├── entities/               #     实体页（人物、组织、工具）
-    ├── concepts/               #     概念页（理论、方法、模式）
-    └── analyses/               #     分析页（对比、综合论述）
+Compare the pros and cons of RAG vs Wiki approaches
 ```
 
-## 适用场景
+## Core Commands
 
-- **研究** — 持续阅读论文，逐步构建领域知识图谱
-- **读书** — 按章节收录，自动构建角色、主题、情节的关联网络
-- **个人成长** — 日记、文章、播客笔记，构建自我认知的结构化图景
-- **竞品分析** — 持续跟踪竞品动态，自动维护对比分析
-- **团队知识库** — 收录会议纪要、项目文档，LLM 自动维护
+| Command | Function |
+|---------|----------|
+| `/wiki init` | Create and register a new knowledge base |
+| `/wiki ingest` | Ingest new materials (supports Markdown, PDF, images) |
+| `/wiki query <question>` | Answer questions based on the knowledge base |
+| `/wiki lint` | Knowledge base health check |
+| `/wiki wipe` | Delete/reset (with recycle bin, recoverable) |
+| `/wiki test` | Automated testing |
 
-## 文档
+All commands also support **natural language** triggers — "ingest this article", "check the knowledge base", "summarize info about XX" — the LLM automatically identifies your intent.
 
-- **[使用手册](docs/user-guide.md)** — 完整的安装配置、功能详解、Obsidian 集成、OpenClaw 接入
-- **[设计理念](skills/wiki/IDEA.md)** — Karpathy LLM Wiki 的原始构想
-- **[Skill 技术文档](skills/wiki/README.md)** — 页面规范、工作流详解、目录结构
+## Natural Language Mode
 
-## 致谢
+You don't need to remember any commands. The Skill automatically detects your intent:
 
-- [Andrej Karpathy](https://gist.github.com/karpathy/442a6bf555914893e9891c11519de94f) — LLM Wiki 的原始理念
-- [Vannevar Bush](https://en.wikipedia.org/wiki/Vannevar_Bush) — 1945 年提出 Memex 构想，个人知识管理的思想源头
+| What you say | Action taken |
+|-------------|-------------|
+| "Ingest this article" | ingest |
+| "What is Memex?" | query |
+| "Compare RAG and Wiki approaches" | query |
+| "Always cite sources in answers" | Record preference to conventions.md |
+| "Check the knowledge base" | lint |
+
+This works especially well on the web (OpenClaw) — interact with your knowledge base like a chat.
+
+## Obsidian Integration
+
+Open the knowledge base directory with [Obsidian](https://obsidian.md/) to browse graph views, backlinks, and page content in real time.
+
+![Obsidian knowledge graph view](docs/images/obsidian.png)
+
+Recommended plugins:
+
+- **Front Matter Title** — Display localized titles on graph nodes (pre-configured)
+- **Dataview** — Metadata queries based on frontmatter
+- **Web Clipper** — One-click browser clipping of web articles into raw/
+
+## OpenClaw (Web)
+
+After configuring the knowledge base path in OpenClaw's memory, you can achieve **zero-friction ingestion** — send a WeChat article link and the LLM automatically downloads, ingests, and organizes it, with no additional commands needed.
+
+![OpenClaw auto-ingest demo](docs/images/openclaw-wiki.gif)
+
+See [User Guide — OpenClaw Integration](docs/user-guide.md#openclaw-integration) for details.
+
+## Knowledge Base Directory Structure
+
+```
+~/my-kb/                        # Knowledge base instance
+├── raw/                        #   Raw materials (you write, LLM reads only)
+│   ├── assets/                 #     Images and attachments
+│   └── *.md / *.pdf            #     Material files
+└── wiki/                       #   LLM-generated and maintained knowledge base
+    ├── index.md                #     Content index
+    ├── log.md                  #     Operation log
+    ├── overview.md             #     Overview page
+    ├── conventions.md          #     Usage conventions (your preferences)
+    ├── sources/                #     Material summary pages
+    ├── entities/               #     Entity pages (people, orgs, tools)
+    ├── concepts/               #     Concept pages (theories, methods, patterns)
+    └── analyses/               #     Analysis pages (comparisons, syntheses)
+```
+
+## Use Cases
+
+- **Research** — Continuously read papers and progressively build a domain knowledge graph
+- **Reading** — Ingest chapter by chapter; auto-build character, theme, and plot networks
+- **Personal Growth** — Journals, articles, podcast notes; build a structured landscape of self-knowledge
+- **Competitive Analysis** — Track competitors continuously with auto-maintained comparison tables
+- **Team Knowledge Base** — Ingest meeting notes and project docs; LLM maintains automatically
+
+## Documentation
+
+- **[User Guide](docs/user-guide.md)** — Full installation, feature guide, Obsidian integration, OpenClaw setup
+- **[Design Philosophy](skills/wiki/IDEA.md)** — Karpathy's original LLM Wiki vision
+- **[Skill Technical Docs](skills/wiki/README.md)** — Page specs, workflow details, directory structure
+
+## Acknowledgments
+
+- [Andrej Karpathy](https://gist.github.com/karpathy/442a6bf555914893e9891c11519de94f) — Original LLM Wiki concept
+- [Vannevar Bush](https://en.wikipedia.org/wiki/Vannevar_Bush) — Proposed the Memex concept in 1945, the intellectual origin of personal knowledge management
 
 ## License
 
